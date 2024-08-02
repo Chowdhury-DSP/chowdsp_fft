@@ -876,15 +876,9 @@ static inline void pffft_real_finalize_4x4 (const float32x4_t* in0, const float3
       [0   0   0   0  -1   1  -1   1]   [i3]
     */
 
-    //cerr << "matrix initial, before e , REAL:\n 1: " << r0 << "\n 1: " << r1 << "\n 1: " << r2 << "\n 1: " << r3 << "\n";
-    //cerr << "matrix initial, before e, IMAG :\n 1: " << i0 << "\n 1: " << i1 << "\n 1: " << i2 << "\n 1: " << i3 << "\n";
-
     std::tie (r1, i1) = cplx_mul_v (r1, i1, e[0], e[1]);
     std::tie (r2, i2) = cplx_mul_v (r2, i2, e[2], e[3]);
     std::tie (r3, i3) = cplx_mul_v (r3, i3, e[4], e[5]);
-
-    //cerr << "matrix initial, real part:\n 1: " << r0 << "\n 1: " << r1 << "\n 1: " << r2 << "\n 1: " << r3 << "\n";
-    //cerr << "matrix initial, imag part:\n 1: " << i0 << "\n 1: " << i1 << "\n 1: " << i2 << "\n 1: " << i3 << "\n";
 
     sr0 = vaddq_f32 (r0, r2);
     dr0 = vsubq_f32 (r0, r2);
