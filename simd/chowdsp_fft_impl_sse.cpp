@@ -1,7 +1,7 @@
-#include <arm_neon.h>
+#include <immintrin.h>
 #include <tuple>
 
-namespace chowdsp::fft::neon
+namespace chowdsp::fft::sse
 {
 static constexpr size_t SIMD_SZ = 4;
 
@@ -11,7 +11,7 @@ struct FFT_Setup
     int Ncvec; // nb of complex simd vectors (N/4 if PFFFT_COMPLEX, N/8 if PFFFT_REAL)
     int ifac[15];
     fft_transform_t transform;
-    float32x4_t* data; // allocated room for twiddle coefs
+    __m128* data; // allocated room for twiddle coefs
     float* e; // points into 'data' , N/4*3 elements
     float* twiddle; // points into 'data', N/4 elements
 };
@@ -35,7 +35,7 @@ static FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
     s->transform = transform;
     /* nb of complex simd vectors */
     s->Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
-    s->data = (float32x4_t*) aligned_malloc (2 * s->Ncvec * sizeof (float) * SIMD_SZ);
+    s->data = (__m128*) aligned_malloc (2 * s->Ncvec * sizeof (float) * SIMD_SZ);
     s->e = (float*) s->data;
     s->twiddle = (float*) (s->data + (2 * s->Ncvec * (SIMD_SZ - 1)) / SIMD_SZ);
 
@@ -58,7 +58,7 @@ static FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
     }
     else
     {
-       common::cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
+        common::cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
     }
 
     /* check that N is decomposable with allowed prime factors */
@@ -82,72 +82,72 @@ static void fft_destroy_setup (FFT_Setup* s)
 }
 
 //====================================================================
-static inline auto interleave2 (float32x4_t in1, float32x4_t in2)
+static inline auto interleave2 (__m128 in1, __m128 in2)
 {
-    const auto tmp = vzipq_f32 (in1, in2);
-    return std::make_tuple (tmp.val[0], tmp.val[1]);
+    auto out1 = _mm_unpacklo_ps (in1, in2);
+    auto out2 = _mm_unpackhi_ps (in1, in2);
+    return std::make_tuple (out1, out2);
 }
 
-static inline auto uninterleave2 (float32x4_t in1, float32x4_t in2)
+static inline auto uninterleave2 (__m128 in1, __m128 in2)
 {
-    const auto tmp = vuzpq_f32 (in1, in2);
-    return std::make_tuple (tmp.val[0], tmp.val[1]);
+    auto out1 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (2, 0, 2, 0));
+    auto out2 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (3, 1, 3, 1));
+    return std::make_tuple (out1, out2);
 }
 
-static inline auto cplx_mul (float32x4_t ar, float32x4_t ai, float br, float bi)
+static inline auto mul_scalar (__m128 a, float b)
 {
-    auto tmp = vmulq_n_f32 (ar, bi);
-    ar = vmulq_n_f32 (ar, br);
-    ar = vsubq_f32 (ar, vmulq_n_f32 (ai, bi));
-    ai = vmulq_n_f32 (ai, br);
-    ai = vaddq_f32 (ai, tmp);
+    return _mm_mul_ps (a, _mm_set1_ps (b));
+}
+
+static inline auto cplx_mul (__m128 ar, __m128 ai, float br, float bi)
+{
+    auto tmp = mul_scalar (ar, bi);
+    ar = mul_scalar (ar, br);
+    ar = _mm_sub_ps (ar, mul_scalar (ai, bi));
+    ai = mul_scalar (ai, br);
+    ai = _mm_add_ps (ai, tmp);
     return std::make_tuple (ar, ai);
 }
 
-static inline auto cplx_mul_conj (float32x4_t ar, float32x4_t ai, float br, float bi)
+static inline auto cplx_mul_conj (__m128 ar, __m128 ai, float br, float bi)
 {
-    auto tmp = vmulq_n_f32 (ar, bi);
-    ar = vmulq_n_f32 (ar, br);
-    ar = vaddq_f32 (ar, vmulq_n_f32 (ai, bi));
-    ai = vmulq_n_f32 (ai, br);
-    ai = vsubq_f32 (ai, tmp);
+    auto tmp = mul_scalar (ar, bi);
+    ar = mul_scalar (ar, br);
+    ar = _mm_add_ps (ar, mul_scalar (ai, bi));
+    ai = mul_scalar (ai, br);
+    ai = _mm_sub_ps (ai, tmp);
     return std::make_tuple (ar, ai);
 }
 
-static inline auto cplx_mul_v (float32x4_t ar, float32x4_t ai, float32x4_t br, float32x4_t bi)
+static inline auto cplx_mul_v (__m128 ar, __m128 ai, __m128 br, __m128 bi)
 {
-    auto tmp = vmulq_f32 (ar, bi);
-    ar = vmulq_f32 (ar, br);
-    ar = vsubq_f32 (ar, vmulq_f32 (ai, bi));
-    ai = vmulq_f32 (ai, br);
-    ai = vaddq_f32 (ai, tmp);
+    auto tmp = _mm_mul_ps (ar, bi);
+    ar = _mm_mul_ps (ar, br);
+    ar = _mm_sub_ps (ar, _mm_mul_ps (ai, bi));
+    ai = _mm_mul_ps (ai, br);
+    ai = _mm_add_ps (ai, tmp);
     return std::make_tuple (ar, ai);
 }
 
-static inline auto cplx_mul_conj_v (float32x4_t ar, float32x4_t ai, float32x4_t br, float32x4_t bi)
+static inline auto cplx_mul_conj_v (__m128 ar, __m128 ai, __m128 br, __m128 bi)
 {
-    auto tmp = vmulq_f32 (ar, bi);
-    ar = vmulq_f32 (ar, br);
-    ar = vaddq_f32 (ar, vmulq_f32 (ai, bi));
-    ai = vmulq_f32 (ai, br);
-    ai = vsubq_f32 (ai, tmp);
+    auto tmp = _mm_mul_ps (ar, bi);
+    ar = _mm_mul_ps (ar, br);
+    ar = _mm_add_ps (ar, _mm_mul_ps (ai, bi));
+    ai = _mm_mul_ps (ai, br);
+    ai = _mm_sub_ps (ai, tmp);
     return std::make_tuple (ar, ai);
 }
 
-static inline void transpose4 (float32x4_t& x0, float32x4_t& x1, float32x4_t& x2, float32x4_t& x3)
+static inline void transpose4 (__m128& x0, __m128& x1, __m128& x2, __m128& x3)
 {
-    float32x4x2_t t0_ = vzipq_f32 (x0, x2);
-    float32x4x2_t t1_ = vzipq_f32 (x1, x3);
-    float32x4x2_t u0_ = vzipq_f32 (t0_.val[0], t1_.val[0]);
-    float32x4x2_t u1_ = vzipq_f32 (t0_.val[1], t1_.val[1]);
-    x0 = u0_.val[0];
-    x1 = u0_.val[1];
-    x2 = u1_.val[0];
-    x3 = u1_.val[1];
+    _MM_TRANSPOSE4_PS (x0, x1, x2, x3);
 }
 
 //====================================================================
-static void passf2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, const float* wa1, float fsign)
+static void passf2_ps (int ido, int l1, const __m128* cc, __m128* ch, const float* wa1, float fsign)
 {
     int k, i;
     int l1ido = l1 * ido;
@@ -155,10 +155,10 @@ static void passf2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     {
         for (k = 0; k < l1ido; k += ido, ch += ido, cc += 2 * ido)
         {
-            ch[0] = vaddq_f32 (cc[0], cc[ido + 0]);
-            ch[l1ido] = vsubq_f32 (cc[0], cc[ido + 0]);
-            ch[1] = vaddq_f32 (cc[1], cc[ido + 1]);
-            ch[l1ido + 1] = vsubq_f32 (cc[1], cc[ido + 1]);
+            ch[0] = _mm_add_ps (cc[0], cc[ido + 0]);
+            ch[l1ido] = _mm_sub_ps (cc[0], cc[ido + 0]);
+            ch[1] = _mm_add_ps (cc[1], cc[ido + 1]);
+            ch[l1ido + 1] = _mm_sub_ps (cc[1], cc[ido + 1]);
         }
     }
     else
@@ -167,12 +167,12 @@ static void passf2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
         {
             for (i = 0; i < ido - 1; i += 2)
             {
-                auto tr2 = vsubq_f32 (cc[i + 0], cc[i + ido + 0]);
-                auto ti2 = vsubq_f32 (cc[i + 1], cc[i + ido + 1]);
+                auto tr2 = _mm_sub_ps (cc[i + 0], cc[i + ido + 0]);
+                auto ti2 = _mm_sub_ps (cc[i + 1], cc[i + ido + 1]);
                 auto wr = wa1[i];
                 auto wi = fsign * wa1[i + 1]; // @OPTIMIZE: fsign will always be +/- 1
-                ch[i] = vaddq_f32 (cc[i + 0], cc[i + ido + 0]);
-                ch[i + 1] = vaddq_f32 (cc[i + 1], cc[i + ido + 1]);
+                ch[i] = _mm_add_ps (cc[i + 0], cc[i + ido + 0]);
+                ch[i + 1] = _mm_add_ps (cc[i + 1], cc[i + ido + 1]);
                 std::tie (tr2, ti2) = cplx_mul (tr2, ti2, wr, wi);
                 ch[i + l1ido] = tr2;
                 ch[i + l1ido + 1] = ti2;
@@ -181,12 +181,12 @@ static void passf2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     }
 }
 
-static void passf3_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, const float* wa1, const float* wa2, float fsign)
+static void passf3_ps (int ido, int l1, const __m128* cc, __m128* ch, const float* wa1, const float* wa2, float fsign)
 {
     static constexpr float taur = -0.5f;
     float taui = 0.866025403784439f * fsign;
     int i, k;
-    float32x4_t tr2, ti2, cr2, ci2, cr3, ci3, dr2, di2, dr3, di3;
+    __m128 tr2, ti2, cr2, ci2, cr3, ci3, dr2, di2, dr3, di3;
     int l1ido = l1 * ido;
     float wr1, wi1, wr2, wi2;
     assert (ido > 2);
@@ -194,18 +194,18 @@ static void passf3_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     {
         for (i = 0; i < ido - 1; i += 2)
         {
-            tr2 = vaddq_f32 (cc[i + ido], cc[i + 2 * ido]);
-            cr2 = vaddq_f32 (cc[i], vmulq_n_f32 (tr2, taur));
-            ch[i] = vaddq_f32 (cc[i], tr2);
-            ti2 = vaddq_f32 (cc[i + ido + 1], cc[i + 2 * ido + 1]);
-            ci2 = vaddq_f32 (cc[i + 1], vmulq_n_f32 (ti2, taur));
-            ch[i + 1] = vaddq_f32 (cc[i + 1], ti2);
-            cr3 = vmulq_n_f32 (vsubq_f32 (cc[i + ido], cc[i + 2 * ido]), taui);
-            ci3 = vmulq_n_f32 (vsubq_f32 (cc[i + ido + 1], cc[i + 2 * ido + 1]), taui);
-            dr2 = vsubq_f32 (cr2, ci3);
-            dr3 = vaddq_f32 (cr2, ci3);
-            di2 = vaddq_f32 (ci2, cr3);
-            di3 = vsubq_f32 (ci2, cr3);
+            tr2 = _mm_add_ps (cc[i + ido], cc[i + 2 * ido]);
+            cr2 = _mm_add_ps (cc[i], mul_scalar (tr2, taur));
+            ch[i] = _mm_add_ps (cc[i], tr2);
+            ti2 = _mm_add_ps (cc[i + ido + 1], cc[i + 2 * ido + 1]);
+            ci2 = _mm_add_ps (cc[i + 1], mul_scalar (ti2, taur));
+            ch[i + 1] = _mm_add_ps (cc[i + 1], ti2);
+            cr3 = mul_scalar (_mm_sub_ps (cc[i + ido], cc[i + 2 * ido]), taui);
+            ci3 = mul_scalar (_mm_sub_ps (cc[i + ido + 1], cc[i + 2 * ido + 1]), taui);
+            dr2 = _mm_sub_ps (cr2, ci3);
+            dr3 = _mm_add_ps (cr2, ci3);
+            di2 = _mm_add_ps (ci2, cr3);
+            di3 = _mm_sub_ps (ci2, cr3);
             wr1 = wa1[i];
             wi1 = fsign * wa1[i + 1];
             wr2 = wa2[i];
@@ -220,34 +220,34 @@ static void passf3_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     }
 }
 
-static void passf4_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, const float* wa1, const float* wa2, const float* wa3, float fsign)
+static void passf4_ps (int ido, int l1, const __m128* cc, __m128* ch, const float* wa1, const float* wa2, const float* wa3, float fsign)
 {
     /* isign == -1 for forward transform and +1 for backward transform */
 
     int i, k;
-    float32x4_t ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4;
+    __m128 ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4;
     int l1ido = l1 * ido;
     if (ido == 2)
     {
         for (k = 0; k < l1ido; k += ido, ch += ido, cc += 4 * ido)
         {
-            tr1 = vsubq_f32 (cc[0], cc[2 * ido + 0]);
-            tr2 = vaddq_f32 (cc[0], cc[2 * ido + 0]);
-            ti1 = vsubq_f32 (cc[1], cc[2 * ido + 1]);
-            ti2 = vaddq_f32 (cc[1], cc[2 * ido + 1]);
-            ti4 = vmulq_n_f32 (vsubq_f32 (cc[1 * ido + 0], cc[3 * ido + 0]), fsign);
-            tr4 = vmulq_n_f32 (vsubq_f32 (cc[3 * ido + 1], cc[1 * ido + 1]), fsign);
-            tr3 = vaddq_f32 (cc[ido + 0], cc[3 * ido + 0]);
-            ti3 = vaddq_f32 (cc[ido + 1], cc[3 * ido + 1]);
+            tr1 = _mm_sub_ps (cc[0], cc[2 * ido + 0]);
+            tr2 = _mm_add_ps (cc[0], cc[2 * ido + 0]);
+            ti1 = _mm_sub_ps (cc[1], cc[2 * ido + 1]);
+            ti2 = _mm_add_ps (cc[1], cc[2 * ido + 1]);
+            ti4 = mul_scalar (_mm_sub_ps (cc[1 * ido + 0], cc[3 * ido + 0]), fsign);
+            tr4 = mul_scalar (_mm_sub_ps (cc[3 * ido + 1], cc[1 * ido + 1]), fsign);
+            tr3 = _mm_add_ps (cc[ido + 0], cc[3 * ido + 0]);
+            ti3 = _mm_add_ps (cc[ido + 1], cc[3 * ido + 1]);
 
-            ch[0 * l1ido + 0] = vaddq_f32 (tr2, tr3);
-            ch[0 * l1ido + 1] = vaddq_f32 (ti2, ti3);
-            ch[1 * l1ido + 0] = vaddq_f32 (tr1, tr4);
-            ch[1 * l1ido + 1] = vaddq_f32 (ti1, ti4);
-            ch[2 * l1ido + 0] = vsubq_f32 (tr2, tr3);
-            ch[2 * l1ido + 1] = vsubq_f32 (ti2, ti3);
-            ch[3 * l1ido + 0] = vsubq_f32 (tr1, tr4);
-            ch[3 * l1ido + 1] = vsubq_f32 (ti1, ti4);
+            ch[0 * l1ido + 0] = _mm_add_ps (tr2, tr3);
+            ch[0 * l1ido + 1] = _mm_add_ps (ti2, ti3);
+            ch[1 * l1ido + 0] = _mm_add_ps (tr1, tr4);
+            ch[1 * l1ido + 1] = _mm_add_ps (ti1, ti4);
+            ch[2 * l1ido + 0] = _mm_sub_ps (tr2, tr3);
+            ch[2 * l1ido + 1] = _mm_sub_ps (ti2, ti3);
+            ch[3 * l1ido + 0] = _mm_sub_ps (tr1, tr4);
+            ch[3 * l1ido + 1] = _mm_sub_ps (ti1, ti4);
         }
     }
     else
@@ -257,24 +257,24 @@ static void passf4_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
             for (i = 0; i < ido - 1; i += 2)
             {
                 float wr1, wi1, wr2, wi2, wr3, wi3;
-                tr1 = vsubq_f32 (cc[i + 0], cc[i + 2 * ido + 0]);
-                tr2 = vaddq_f32 (cc[i + 0], cc[i + 2 * ido + 0]);
-                ti1 = vsubq_f32 (cc[i + 1], cc[i + 2 * ido + 1]);
-                ti2 = vaddq_f32 (cc[i + 1], cc[i + 2 * ido + 1]);
-                tr4 = vmulq_n_f32 (vsubq_f32 (cc[i + 3 * ido + 1], cc[i + 1 * ido + 1]), fsign);
-                ti4 = vmulq_n_f32 (vsubq_f32 (cc[i + 1 * ido + 0], cc[i + 3 * ido + 0]), fsign);
-                tr3 = vaddq_f32 (cc[i + ido + 0], cc[i + 3 * ido + 0]);
-                ti3 = vaddq_f32 (cc[i + ido + 1], cc[i + 3 * ido + 1]);
+                tr1 = _mm_sub_ps (cc[i + 0], cc[i + 2 * ido + 0]);
+                tr2 = _mm_add_ps (cc[i + 0], cc[i + 2 * ido + 0]);
+                ti1 = _mm_sub_ps (cc[i + 1], cc[i + 2 * ido + 1]);
+                ti2 = _mm_add_ps (cc[i + 1], cc[i + 2 * ido + 1]);
+                tr4 = mul_scalar (_mm_sub_ps (cc[i + 3 * ido + 1], cc[i + 1 * ido + 1]), fsign);
+                ti4 = mul_scalar (_mm_sub_ps (cc[i + 1 * ido + 0], cc[i + 3 * ido + 0]), fsign);
+                tr3 = _mm_add_ps (cc[i + ido + 0], cc[i + 3 * ido + 0]);
+                ti3 = _mm_add_ps (cc[i + ido + 1], cc[i + 3 * ido + 1]);
 
-                ch[i] = vaddq_f32 (tr2, tr3);
-                cr3 = vsubq_f32 (tr2, tr3);
-                ch[i + 1] = vaddq_f32 (ti2, ti3);
-                ci3 = vsubq_f32 (ti2, ti3);
+                ch[i] = _mm_add_ps (tr2, tr3);
+                cr3 = _mm_sub_ps (tr2, tr3);
+                ch[i + 1] = _mm_add_ps (ti2, ti3);
+                ci3 = _mm_sub_ps (ti2, ti3);
 
-                cr2 = vaddq_f32 (tr1, tr4);
-                cr4 = vsubq_f32 (tr1, tr4);
-                ci2 = vaddq_f32 (ti1, ti4);
-                ci4 = vsubq_f32 (ti1, ti4);
+                cr2 = _mm_add_ps (tr1, tr4);
+                cr4 = _mm_sub_ps (tr1, tr4);
+                ci2 = _mm_add_ps (ti1, ti4);
+                ci4 = _mm_sub_ps (ti1, ti4);
                 wr1 = wa1[i];
                 wi1 = fsign * wa1[i + 1];
                 std::tie (cr2, ci2) = cplx_mul (cr2, ci2, wr1, wi1);
@@ -297,7 +297,7 @@ static void passf4_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     }
 }
 
-static void passf5_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4, float fsign)
+static void passf5_ps (int ido, int l1, const __m128* cc, __m128* ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4, float fsign)
 {
     static constexpr float tr11 = .309016994374947f;
     const float ti11 = .951056516295154f * fsign;
@@ -306,7 +306,7 @@ static void passf5_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
 
     /* Local variables */
     int i, k;
-    float32x4_t ci2, ci3, ci4, ci5, di3, di4, di5, di2, cr2, cr3, cr5, cr4, ti2, ti3,
+    __m128 ci2, ci3, ci4, ci5, di3, di4, di5, di2, cr2, cr3, cr5, cr4, ti2, ti3,
         ti4, ti5, dr3, dr4, dr5, dr2, tr2, tr3, tr4, tr5;
 
     float wr1, wi1, wr2, wi2, wr3, wi3, wr4, wi4;
@@ -319,32 +319,32 @@ static void passf5_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
     {
         for (i = 0; i < ido - 1; i += 2)
         {
-            ti5 = vsubq_f32 (cc_ref (i, 2), cc_ref (i, 5));
-            ti2 = vaddq_f32 (cc_ref (i, 2), cc_ref (i, 5));
-            ti4 = vsubq_f32 (cc_ref (i, 3), cc_ref (i, 4));
-            ti3 = vaddq_f32 (cc_ref (i, 3), cc_ref (i, 4));
-            tr5 = vsubq_f32 (cc_ref (i - 1, 2), cc_ref (i - 1, 5));
-            tr2 = vaddq_f32 (cc_ref (i - 1, 2), cc_ref (i - 1, 5));
-            tr4 = vsubq_f32 (cc_ref (i - 1, 3), cc_ref (i - 1, 4));
-            tr3 = vaddq_f32 (cc_ref (i - 1, 3), cc_ref (i - 1, 4));
-            ch_ref (i - 1, 1) = vaddq_f32 (cc_ref (i - 1, 1), vaddq_f32 (tr2, tr3));
-            ch_ref (i, 1) = vaddq_f32 (cc_ref (i, 1), vaddq_f32 (ti2, ti3));
-            cr2 = vaddq_f32 (cc_ref (i - 1, 1), vaddq_f32 (vmulq_n_f32 (tr2, tr11), vmulq_n_f32 (tr3, tr12)));
-            ci2 = vaddq_f32 (cc_ref (i, 1), vaddq_f32 (vmulq_n_f32 (ti2, tr11), vmulq_n_f32 (ti3, tr12)));
-            cr3 = vaddq_f32 (cc_ref (i - 1, 1), vaddq_f32 (vmulq_n_f32 (tr2, tr12), vmulq_n_f32 (tr3, tr11)));
-            ci3 = vaddq_f32 (cc_ref (i, 1), vaddq_f32 (vmulq_n_f32 (ti2, tr12), vmulq_n_f32 (ti3, tr11)));
-            cr5 = vaddq_f32 (vmulq_n_f32 (tr5, ti11), vmulq_n_f32 (tr4, ti12));
-            ci5 = vaddq_f32 (vmulq_n_f32 (ti5, ti11), vmulq_n_f32 (ti4, ti12));
-            cr4 = vsubq_f32 (vmulq_n_f32 (tr5, ti12), vmulq_n_f32 (tr4, ti11));
-            ci4 = vsubq_f32 (vmulq_n_f32 (ti5, ti12), vmulq_n_f32 (ti4, ti11));
-            dr3 = vsubq_f32 (cr3, ci4);
-            dr4 = vaddq_f32 (cr3, ci4);
-            di3 = vaddq_f32 (ci3, cr4);
-            di4 = vsubq_f32 (ci3, cr4);
-            dr5 = vaddq_f32 (cr2, ci5);
-            dr2 = vsubq_f32 (cr2, ci5);
-            di5 = vsubq_f32 (ci2, cr5);
-            di2 = vaddq_f32 (ci2, cr5);
+            ti5 = _mm_sub_ps (cc_ref (i, 2), cc_ref (i, 5));
+            ti2 = _mm_add_ps (cc_ref (i, 2), cc_ref (i, 5));
+            ti4 = _mm_sub_ps (cc_ref (i, 3), cc_ref (i, 4));
+            ti3 = _mm_add_ps (cc_ref (i, 3), cc_ref (i, 4));
+            tr5 = _mm_sub_ps (cc_ref (i - 1, 2), cc_ref (i - 1, 5));
+            tr2 = _mm_add_ps (cc_ref (i - 1, 2), cc_ref (i - 1, 5));
+            tr4 = _mm_sub_ps (cc_ref (i - 1, 3), cc_ref (i - 1, 4));
+            tr3 = _mm_add_ps (cc_ref (i - 1, 3), cc_ref (i - 1, 4));
+            ch_ref (i - 1, 1) = _mm_add_ps (cc_ref (i - 1, 1), _mm_add_ps (tr2, tr3));
+            ch_ref (i, 1) = _mm_add_ps (cc_ref (i, 1), _mm_add_ps (ti2, ti3));
+            cr2 = _mm_add_ps (cc_ref (i - 1, 1), _mm_add_ps (mul_scalar (tr2, tr11), mul_scalar (tr3, tr12)));
+            ci2 = _mm_add_ps (cc_ref (i, 1), _mm_add_ps (mul_scalar (ti2, tr11), mul_scalar (ti3, tr12)));
+            cr3 = _mm_add_ps (cc_ref (i - 1, 1), _mm_add_ps (mul_scalar (tr2, tr12), mul_scalar (tr3, tr11)));
+            ci3 = _mm_add_ps (cc_ref (i, 1), _mm_add_ps (mul_scalar (ti2, tr12), mul_scalar (ti3, tr11)));
+            cr5 = _mm_add_ps (mul_scalar (tr5, ti11), mul_scalar (tr4, ti12));
+            ci5 = _mm_add_ps (mul_scalar (ti5, ti11), mul_scalar (ti4, ti12));
+            cr4 = _mm_sub_ps (mul_scalar (tr5, ti12), mul_scalar (tr4, ti11));
+            ci4 = _mm_sub_ps (mul_scalar (ti5, ti12), mul_scalar (ti4, ti11));
+            dr3 = _mm_sub_ps (cr3, ci4);
+            dr4 = _mm_add_ps (cr3, ci4);
+            di3 = _mm_add_ps (ci3, cr4);
+            di4 = _mm_sub_ps (ci3, cr4);
+            dr5 = _mm_add_ps (cr2, ci5);
+            dr2 = _mm_sub_ps (cr2, ci5);
+            di5 = _mm_sub_ps (ci2, cr5);
+            di2 = _mm_add_ps (ci2, cr5);
             wr1 = wa1[i];
             wi1 = fsign * wa1[i + 1];
             wr2 = wa2[i];
@@ -371,9 +371,9 @@ static void passf5_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
 #undef cc_ref
 }
 
-static float32x4_t* cfftf1_ps (int n, const float32x4_t* input_readonly, float32x4_t* work1, float32x4_t* work2, const float* wa, const int* ifac, int isign)
+static __m128* cfftf1_ps (int n, const __m128* input_readonly, __m128* work1, __m128* work2, const float* wa, const int* ifac, int isign)
 {
-    auto* in = (float32x4_t*) input_readonly;
+    auto* in = (__m128*) input_readonly;
     auto* out = (in == work2 ? work1 : work2);
     int nf = ifac[1], k1;
     int l1 = 1;
@@ -433,11 +433,11 @@ static float32x4_t* cfftf1_ps (int n, const float32x4_t* input_readonly, float32
     return in; /* this is in fact the output .. */
 }
 
-static void pffft_cplx_finalize (int Ncvec, const float32x4_t* in, float32x4_t* out, const float32x4_t* e)
+static void pffft_cplx_finalize (int Ncvec, const __m128* in, __m128* out, const __m128* e)
 {
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
-    float32x4_t r0, i0, r1, i1, r2, i2, r3, i3;
-    float32x4_t sr0, dr0, sr1, dr1, si0, di0, si1, di1;
+    __m128 r0, i0, r1, i1, r2, i2, r3, i3;
+    __m128 sr0, dr0, sr1, dr1, si0, di0, si1, di1;
     assert (in != out);
     for (k = 0; k < dk; ++k)
     {
@@ -455,14 +455,14 @@ static void pffft_cplx_finalize (int Ncvec, const float32x4_t* in, float32x4_t* 
         std::tie (r2, i2) = cplx_mul_v (r2, i2, e[k * 6 + 2], e[k * 6 + 3]);
         std::tie (r3, i3) = cplx_mul_v (r3, i3, e[k * 6 + 4], e[k * 6 + 5]);
 
-        sr0 = vaddq_f32 (r0, r2);
-        dr0 = vsubq_f32 (r0, r2);
-        sr1 = vaddq_f32 (r1, r3);
-        dr1 = vsubq_f32 (r1, r3);
-        si0 = vaddq_f32 (i0, i2);
-        di0 = vsubq_f32 (i0, i2);
-        si1 = vaddq_f32 (i1, i3);
-        di1 = vsubq_f32 (i1, i3);
+        sr0 = _mm_add_ps (r0, r2);
+        dr0 = _mm_sub_ps (r0, r2);
+        sr1 = _mm_add_ps (r1, r3);
+        dr1 = _mm_sub_ps (r1, r3);
+        si0 = _mm_add_ps (i0, i2);
+        di0 = _mm_sub_ps (i0, i2);
+        si1 = _mm_add_ps (i1, i3);
+        di1 = _mm_sub_ps (i1, i3);
 
         /*
           transformation for each column is:
@@ -477,14 +477,14 @@ static void pffft_cplx_finalize (int Ncvec, const float32x4_t* in, float32x4_t* 
           [0  -1   0   1   1   0  -1   0]   [i3]
         */
 
-        r0 = vaddq_f32 (sr0, sr1);
-        i0 = vaddq_f32 (si0, si1);
-        r1 = vaddq_f32 (dr0, di1);
-        i1 = vsubq_f32 (di0, dr1);
-        r2 = vsubq_f32 (sr0, sr1);
-        i2 = vsubq_f32 (si0, si1);
-        r3 = vsubq_f32 (dr0, di1);
-        i3 = vaddq_f32 (di0, dr1);
+        r0 = _mm_add_ps (sr0, sr1);
+        i0 = _mm_add_ps (si0, si1);
+        r1 = _mm_add_ps (dr0, di1);
+        i1 = _mm_sub_ps (di0, dr1);
+        r2 = _mm_sub_ps (sr0, sr1);
+        i2 = _mm_sub_ps (si0, si1);
+        r3 = _mm_sub_ps (dr0, di1);
+        i3 = _mm_add_ps (di0, dr1);
 
         *out++ = r0;
         *out++ = i0;
@@ -497,11 +497,11 @@ static void pffft_cplx_finalize (int Ncvec, const float32x4_t* in, float32x4_t* 
     }
 }
 
-static void pffft_cplx_preprocess (int Ncvec, const float32x4_t* in, float32x4_t* out, const float32x4_t* e)
+static void pffft_cplx_preprocess (int Ncvec, const __m128* in, __m128* out, const __m128* e)
 {
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
-    float32x4_t r0, i0, r1, i1, r2, i2, r3, i3;
-    float32x4_t sr0, dr0, sr1, dr1, si0, di0, si1, di1;
+    __m128 r0, i0, r1, i1, r2, i2, r3, i3;
+    __m128 sr0, dr0, sr1, dr1, si0, di0, si1, di1;
     assert (in != out);
     for (k = 0; k < dk; ++k)
     {
@@ -514,23 +514,23 @@ static void pffft_cplx_preprocess (int Ncvec, const float32x4_t* in, float32x4_t
         r3 = in[8 * k + 6];
         i3 = in[8 * k + 7];
 
-        sr0 = vaddq_f32 (r0, r2);
-        dr0 = vsubq_f32 (r0, r2);
-        sr1 = vaddq_f32 (r1, r3);
-        dr1 = vsubq_f32 (r1, r3);
-        si0 = vaddq_f32 (i0, i2);
-        di0 = vsubq_f32 (i0, i2);
-        si1 = vaddq_f32 (i1, i3);
-        di1 = vsubq_f32 (i1, i3);
+        sr0 = _mm_add_ps (r0, r2);
+        dr0 = _mm_sub_ps (r0, r2);
+        sr1 = _mm_add_ps (r1, r3);
+        dr1 = _mm_sub_ps (r1, r3);
+        si0 = _mm_add_ps (i0, i2);
+        di0 = _mm_sub_ps (i0, i2);
+        si1 = _mm_add_ps (i1, i3);
+        di1 = _mm_sub_ps (i1, i3);
 
-        r0 = vaddq_f32 (sr0, sr1);
-        i0 = vaddq_f32 (si0, si1);
-        r1 = vsubq_f32 (dr0, di1);
-        i1 = vaddq_f32 (di0, dr1);
-        r2 = vsubq_f32 (sr0, sr1);
-        i2 = vsubq_f32 (si0, si1);
-        r3 = vaddq_f32 (dr0, di1);
-        i3 = vsubq_f32 (di0, dr1);
+        r0 = _mm_add_ps (sr0, sr1);
+        i0 = _mm_add_ps (si0, si1);
+        r1 = _mm_sub_ps (dr0, di1);
+        i1 = _mm_add_ps (di0, dr1);
+        r2 = _mm_sub_ps (sr0, sr1);
+        i2 = _mm_sub_ps (si0, si1);
+        r3 = _mm_add_ps (dr0, di1);
+        i3 = _mm_sub_ps (di0, dr1);
 
         std::tie (r1, i1) = cplx_mul_conj_v (r1, i1, e[k * 6 + 0], e[k * 6 + 1]);
         std::tie (r2, i2) = cplx_mul_conj_v (r2, i2, e[k * 6 + 2], e[k * 6 + 3]);
@@ -551,14 +551,14 @@ static void pffft_cplx_preprocess (int Ncvec, const float32x4_t* in, float32x4_t
 }
 
 //====================================================================
-static void radf2_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* wa1)
+static void radf2_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* wa1)
 {
     int i, k, l1ido = l1 * ido;
     for (k = 0; k < l1ido; k += ido)
     {
         auto a = cc[k], b = cc[k + l1ido];
-        ch[2 * k] = vaddq_f32 (a, b);
-        ch[2 * (k + ido) - 1] = vsubq_f32 (a, b);
+        ch[2 * k] = _mm_add_ps (a, b);
+        ch[2 * (k + ido) - 1] = _mm_sub_ps (a, b);
     }
     if (ido < 2)
         return;
@@ -571,10 +571,10 @@ static void radf2_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
                 auto tr2 = cc[i - 1 + k + l1ido], ti2 = cc[i + k + l1ido];
                 auto br = cc[i - 1 + k], bi = cc[i + k];
                 std::tie (tr2, ti2) = cplx_mul_conj (tr2, ti2, wa1[i - 2], wa1[i - 1]);
-                ch[i + 2 * k] = vaddq_f32 (bi, ti2);
-                ch[2 * (k + ido) - i] = vsubq_f32 (ti2, bi);
-                ch[i - 1 + 2 * k] = vaddq_f32 (br, tr2);
-                ch[2 * (k + ido) - i - 1] = vsubq_f32 (br, tr2);
+                ch[i + 2 * k] = _mm_add_ps (bi, ti2);
+                ch[2 * (k + ido) - i] = _mm_sub_ps (ti2, bi);
+                ch[i - 1 + 2 * k] = _mm_add_ps (br, tr2);
+                ch[2 * (k + ido) - i - 1] = _mm_sub_ps (br, tr2);
             }
         }
         if (ido % 2 == 1)
@@ -582,23 +582,23 @@ static void radf2_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     }
     for (k = 0; k < l1ido; k += ido)
     {
-        ch[2 * k + ido] = vnegq_f32 (cc[ido - 1 + k + l1ido]);
+        ch[2 * k + ido] = _mm_xor_ps(cc[ido - 1 + k + l1ido], _mm_set1_ps(-0.f)); // negate
         ch[2 * k + ido - 1] = cc[k + ido - 1];
     }
 }
 
-static void radf3_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* wa1, const float* wa2)
+static void radf3_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* wa1, const float* wa2)
 {
     static constexpr float taur = -0.5f;
     static constexpr float taui = 0.866025403784439f;
     int i, k, ic;
-    float32x4_t ci2, di2, di3, cr2, dr2, dr3, ti2, ti3, tr2, tr3;
+    __m128 ci2, di2, di3, cr2, dr2, dr3, ti2, ti3, tr2, tr3;
     for (k = 0; k < l1; k++)
     {
-        cr2 = vaddq_f32 (cc[(k + l1) * ido], cc[(k + 2 * l1) * ido]);
-        ch[3 * k * ido] = vaddq_f32 (cc[k * ido], cr2);
-        ch[(3 * k + 2) * ido] = vmulq_n_f32 (vsubq_f32 (cc[(k + l1 * 2) * ido], cc[(k + l1) * ido]), taui);
-        ch[ido - 1 + (3 * k + 1) * ido] = vaddq_f32 (cc[k * ido], vmulq_n_f32 (cr2, taur));
+        cr2 = _mm_add_ps (cc[(k + l1) * ido], cc[(k + 2 * l1) * ido]);
+        ch[3 * k * ido] = _mm_add_ps (cc[k * ido], cr2);
+        ch[(3 * k + 2) * ido] = mul_scalar (_mm_sub_ps (cc[(k + l1 * 2) * ido], cc[(k + l1) * ido]), taui);
+        ch[ido - 1 + (3 * k + 1) * ido] = _mm_add_ps (cc[k * ido], mul_scalar (cr2, taur));
     }
     if (ido == 1)
         return;
@@ -610,23 +610,23 @@ static void radf3_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
             std::tie (dr2, di2) = cplx_mul_conj (cc[i - 1 + (k + l1) * ido], cc[i + (k + l1) * ido], wa1[i - 2], wa1[i - 1]);
             std::tie (dr3, di3) = cplx_mul_conj (cc[i - 1 + (k + l1 * 2) * ido], cc[i + (k + l1 * 2) * ido], wa2[i - 2], wa2[i - 1]);
 
-            cr2 = vaddq_f32 (dr2, dr3);
-            ci2 = vaddq_f32 (di2, di3);
-            ch[i - 1 + 3 * k * ido] = vaddq_f32 (cc[i - 1 + k * ido], cr2);
-            ch[i + 3 * k * ido] = vaddq_f32 (cc[i + k * ido], ci2);
-            tr2 = vaddq_f32 (cc[i - 1 + k * ido], vmulq_n_f32 (cr2, taur));
-            ti2 = vaddq_f32 (cc[i + k * ido], vmulq_n_f32 (ci2, taur));
-            tr3 = vmulq_n_f32 (vsubq_f32 (di2, di3), taui);
-            ti3 = vmulq_n_f32 (vsubq_f32 (dr3, dr2), taui);
-            ch[i - 1 + (3 * k + 2) * ido] = vaddq_f32 (tr2, tr3);
-            ch[ic - 1 + (3 * k + 1) * ido] = vsubq_f32 (tr2, tr3);
-            ch[i + (3 * k + 2) * ido] = vaddq_f32 (ti2, ti3);
-            ch[ic + (3 * k + 1) * ido] = vsubq_f32 (ti3, ti2);
+            cr2 = _mm_add_ps (dr2, dr3);
+            ci2 = _mm_add_ps (di2, di3);
+            ch[i - 1 + 3 * k * ido] = _mm_add_ps (cc[i - 1 + k * ido], cr2);
+            ch[i + 3 * k * ido] = _mm_add_ps (cc[i + k * ido], ci2);
+            tr2 = _mm_add_ps (cc[i - 1 + k * ido], mul_scalar (cr2, taur));
+            ti2 = _mm_add_ps (cc[i + k * ido], mul_scalar (ci2, taur));
+            tr3 = mul_scalar (_mm_sub_ps (di2, di3), taui);
+            ti3 = mul_scalar (_mm_sub_ps (dr3, dr2), taui);
+            ch[i - 1 + (3 * k + 2) * ido] = _mm_add_ps (tr2, tr3);
+            ch[ic - 1 + (3 * k + 1) * ido] = _mm_sub_ps (tr2, tr3);
+            ch[i + (3 * k + 2) * ido] = _mm_add_ps (ti2, ti3);
+            ch[ic + (3 * k + 1) * ido] = _mm_sub_ps (ti3, ti2);
         }
     }
 }
 
-static void radf4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* __restrict wa1, const float* __restrict wa2, const float* __restrict wa3)
+static void radf4_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* __restrict wa1, const float* __restrict wa2, const float* __restrict wa3)
 {
     static constexpr float minus_hsqt2 = -0.7071067811865475f;
     int i, k, l1ido = l1 * ido;
@@ -638,12 +638,12 @@ static void radf4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
             // this loop represents between 25% and 40% of total radf4_ps cost !
             auto a0 = cc[0], a1 = cc[l1ido];
             auto a2 = cc[2 * l1ido], a3 = cc[3 * l1ido];
-            auto tr1 = vaddq_f32 (a1, a3);
-            auto tr2 = vaddq_f32 (a0, a2);
-            ch[2 * ido - 1] = vsubq_f32 (a0, a2);
-            ch[2 * ido] = vsubq_f32 (a3, a1);
-            ch[0] = vaddq_f32 (tr1, tr2);
-            ch[4 * ido - 1] = vsubq_f32 (tr2, tr1);
+            auto tr1 = _mm_add_ps (a1, a3);
+            auto tr2 = _mm_add_ps (a0, a2);
+            ch[2 * ido - 1] = _mm_sub_ps (a0, a2);
+            ch[2 * ido] = _mm_sub_ps (a3, a1);
+            ch[0] = _mm_add_ps (tr1, tr2);
+            ch[4 * ido - 1] = _mm_sub_ps (tr2, tr1);
             cc += ido;
             ch += 4 * ido;
         }
@@ -656,12 +656,12 @@ static void radf4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     {
         for (k = 0; k < l1ido; k += ido)
         {
-            const auto* __restrict pc = (float32x4_t*) (cc + 1 + k);
+            const auto* __restrict pc = (__m128*) (cc + 1 + k);
             for (i = 2; i < ido; i += 2, pc += 2)
             {
                 int ic = ido - i;
-                float32x4_t cr2, ci2, cr3, ci3, cr4, ci4;
-                float32x4_t tr1, ti1, tr2, ti2, tr3, ti3, tr4, ti4;
+                __m128 cr2, ci2, cr3, ci3, cr4, ci4;
+                __m128 tr1, ti1, tr2, ti2, tr3, ti3, tr4, ti4;
 
                 std::tie (cr2, ci2) = cplx_mul_conj (pc[1 * l1ido + 0], pc[1 * l1ido + 1], wa1[i - 2], wa1[i - 1]);
                 std::tie (cr3, ci3) = cplx_mul_conj (pc[2 * l1ido + 0], pc[2 * l1ido + 1], wa2[i - 2], wa2[i - 1]);
@@ -669,22 +669,22 @@ static void radf4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
 
                 /* at this point, on SSE, five of "cr2 cr3 cr4 ci2 ci3 ci4" should be loaded in registers */
 
-                tr1 = vaddq_f32 (cr2, cr4);
-                tr4 = vsubq_f32 (cr4, cr2);
-                tr2 = vaddq_f32 (pc[0], cr3);
-                tr3 = vsubq_f32 (pc[0], cr3);
-                ch[i - 1 + 4 * k] = vaddq_f32 (tr1, tr2);
-                ch[ic - 1 + 4 * k + 3 * ido] = vsubq_f32 (tr2, tr1); // at this point tr1 and tr2 can be disposed
-                ti1 = vaddq_f32 (ci2, ci4);
-                ti4 = vsubq_f32 (ci2, ci4);
-                ch[i - 1 + 4 * k + 2 * ido] = vaddq_f32 (ti4, tr3);
-                ch[ic - 1 + 4 * k + 1 * ido] = vsubq_f32 (tr3, ti4); // dispose tr3, ti4
-                ti2 = vaddq_f32 (pc[1], ci3);
-                ti3 = vsubq_f32 (pc[1], ci3);
-                ch[i + 4 * k] = vaddq_f32 (ti1, ti2);
-                ch[ic + 4 * k + 3 * ido] = vsubq_f32 (ti1, ti2);
-                ch[i + 4 * k + 2 * ido] = vaddq_f32 (tr4, ti3);
-                ch[ic + 4 * k + 1 * ido] = vsubq_f32 (tr4, ti3);
+                tr1 = _mm_add_ps (cr2, cr4);
+                tr4 = _mm_sub_ps (cr4, cr2);
+                tr2 = _mm_add_ps (pc[0], cr3);
+                tr3 = _mm_sub_ps (pc[0], cr3);
+                ch[i - 1 + 4 * k] = _mm_add_ps (tr1, tr2);
+                ch[ic - 1 + 4 * k + 3 * ido] = _mm_sub_ps (tr2, tr1); // at this point tr1 and tr2 can be disposed
+                ti1 = _mm_add_ps (ci2, ci4);
+                ti4 = _mm_sub_ps (ci2, ci4);
+                ch[i - 1 + 4 * k + 2 * ido] = _mm_add_ps (ti4, tr3);
+                ch[ic - 1 + 4 * k + 1 * ido] = _mm_sub_ps (tr3, ti4); // dispose tr3, ti4
+                ti2 = _mm_add_ps (pc[1], ci3);
+                ti3 = _mm_sub_ps (pc[1], ci3);
+                ch[i + 4 * k] = _mm_add_ps (ti1, ti2);
+                ch[ic + 4 * k + 3 * ido] = _mm_sub_ps (ti1, ti2);
+                ch[i + 4 * k + 2 * ido] = _mm_add_ps (tr4, ti3);
+                ch[ic + 4 * k + 1 * ido] = _mm_sub_ps (tr4, ti3);
             }
         }
         if (ido % 2 == 1)
@@ -694,16 +694,16 @@ static void radf4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     {
         auto a = cc[ido - 1 + k + l1ido], b = cc[ido - 1 + k + 3 * l1ido];
         auto c = cc[ido - 1 + k], d = cc[ido - 1 + k + 2 * l1ido];
-        auto ti1 = vmulq_n_f32 (vaddq_f32 (a, b), minus_hsqt2);
-        auto tr1 = vmulq_n_f32 (vsubq_f32 (b, a), minus_hsqt2);
-        ch[ido - 1 + 4 * k] = vaddq_f32 (tr1, c);
-        ch[ido - 1 + 4 * k + 2 * ido] = vsubq_f32 (c, tr1);
-        ch[4 * k + 1 * ido] = vsubq_f32 (ti1, d);
-        ch[4 * k + 3 * ido] = vaddq_f32 (ti1, d);
+        auto ti1 = mul_scalar (_mm_add_ps (a, b), minus_hsqt2);
+        auto tr1 = mul_scalar (_mm_sub_ps (b, a), minus_hsqt2);
+        ch[ido - 1 + 4 * k] = _mm_add_ps (tr1, c);
+        ch[ido - 1 + 4 * k + 2 * ido] = _mm_sub_ps (c, tr1);
+        ch[4 * k + 1 * ido] = _mm_sub_ps (ti1, d);
+        ch[4 * k + 3 * ido] = _mm_add_ps (ti1, d);
     }
 }
 
-static void radf5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4)
+static void radf5_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4)
 {
     static constexpr float tr11 = .309016994374947f;
     static constexpr float ti11 = .951056516295154f;
@@ -715,7 +715,7 @@ static void radf5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
 
     /* Local variables */
     int i, k, ic;
-    float32x4_t ci2, di2, ci4, ci5, di3, di4, di5, ci3, cr2, cr3, dr2, dr3, dr4, dr5,
+    __m128 ci2, di2, ci4, ci5, di3, di4, di5, ci3, cr2, cr3, dr2, dr3, dr4, dr5,
         cr5, cr4, ti2, ti3, ti5, ti4, tr2, tr3, tr4, tr5;
     int idp2;
 
@@ -731,15 +731,15 @@ static void radf5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     /* Function Body */
     for (k = 1; k <= l1; ++k)
     {
-        cr2 = vaddq_f32 (cc_ref (1, k, 5), cc_ref (1, k, 2));
-        ci5 = vsubq_f32 (cc_ref (1, k, 5), cc_ref (1, k, 2));
-        cr3 = vaddq_f32 (cc_ref (1, k, 4), cc_ref (1, k, 3));
-        ci4 = vsubq_f32 (cc_ref (1, k, 4), cc_ref (1, k, 3));
-        ch_ref (1, 1, k) = vaddq_f32 (cc_ref (1, k, 1), vaddq_f32 (cr2, cr3));
-        ch_ref (ido, 2, k) = vaddq_f32 (cc_ref (1, k, 1), vaddq_f32 (vmulq_n_f32 (cr2, tr11), vmulq_n_f32 (cr3, tr12)));
-        ch_ref (1, 3, k) = vaddq_f32 (vmulq_n_f32 (ci5, ti11), vmulq_n_f32 (ci4, ti12));
-        ch_ref (ido, 4, k) = vaddq_f32 (cc_ref (1, k, 1), vaddq_f32 (vmulq_n_f32 (cr2, tr12), vmulq_n_f32 (cr3, tr11)));
-        ch_ref (1, 5, k) = vsubq_f32 (vmulq_n_f32 (ci5, ti12), vmulq_n_f32 (ci4, ti11));
+        cr2 = _mm_add_ps (cc_ref (1, k, 5), cc_ref (1, k, 2));
+        ci5 = _mm_sub_ps (cc_ref (1, k, 5), cc_ref (1, k, 2));
+        cr3 = _mm_add_ps (cc_ref (1, k, 4), cc_ref (1, k, 3));
+        ci4 = _mm_sub_ps (cc_ref (1, k, 4), cc_ref (1, k, 3));
+        ch_ref (1, 1, k) = _mm_add_ps (cc_ref (1, k, 1), _mm_add_ps (cr2, cr3));
+        ch_ref (ido, 2, k) = _mm_add_ps (cc_ref (1, k, 1), _mm_add_ps (mul_scalar (cr2, tr11), mul_scalar (cr3, tr12)));
+        ch_ref (1, 3, k) = _mm_add_ps (mul_scalar (ci5, ti11), mul_scalar (ci4, ti12));
+        ch_ref (ido, 4, k) = _mm_add_ps (cc_ref (1, k, 1), _mm_add_ps (mul_scalar (cr2, tr12), mul_scalar (cr3, tr11)));
+        ch_ref (1, 5, k) = _mm_sub_ps (mul_scalar (ci5, ti12), mul_scalar (ci4, ti11));
     }
     if (ido == 1)
     {
@@ -755,41 +755,41 @@ static void radf5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
             std::tie (dr3, di3) = cplx_mul_conj (cc_ref (i - 1, k, 3), cc_ref (i, k, 3), wa2[i - 3], wa2[i - 2]);
             std::tie (dr4, di4) = cplx_mul_conj (cc_ref (i - 1, k, 4), cc_ref (i, k, 4), wa3[i - 3], wa3[i - 2]);
             std::tie (dr5, di5) = cplx_mul_conj (cc_ref (i - 1, k, 5), cc_ref (i, k, 5), wa4[i - 3], wa4[i - 2]);
-            cr2 = vaddq_f32 (dr2, dr5);
-            ci5 = vsubq_f32 (dr5, dr2);
-            cr5 = vsubq_f32 (di2, di5);
-            ci2 = vaddq_f32 (di2, di5);
-            cr3 = vaddq_f32 (dr3, dr4);
-            ci4 = vsubq_f32 (dr4, dr3);
-            cr4 = vsubq_f32 (di3, di4);
-            ci3 = vaddq_f32 (di3, di4);
-            ch_ref (i - 1, 1, k) = vaddq_f32 (cc_ref (i - 1, k, 1), vaddq_f32 (cr2, cr3));
-            ch_ref (i, 1, k) = vsubq_f32 (cc_ref (i, k, 1), vaddq_f32 (ci2, ci3)); //
-            tr2 = vaddq_f32 (cc_ref (i - 1, k, 1), vaddq_f32 (vmulq_n_f32 (cr2, tr11), vmulq_n_f32 (cr3, tr12)));
-            ti2 = vsubq_f32 (cc_ref (i, k, 1), vaddq_f32 (vmulq_n_f32 (ci2, tr11), vmulq_n_f32 (ci3, tr12))); //
-            tr3 = vaddq_f32 (cc_ref (i - 1, k, 1), vaddq_f32 (vmulq_n_f32 (cr2, tr12), vmulq_n_f32 (cr3, tr11)));
-            ti3 = vsubq_f32 (cc_ref (i, k, 1), vaddq_f32 (vmulq_n_f32 (ci2, tr12), vmulq_n_f32 (ci3, tr11))); //
-            tr5 = vaddq_f32 (vmulq_n_f32 (cr5, ti11), vmulq_n_f32 (cr4, ti12));
-            ti5 = vaddq_f32 (vmulq_n_f32 (ci5, ti11), vmulq_n_f32 (ci4, ti12));
-            tr4 = vsubq_f32 (vmulq_n_f32 (cr5, ti12), vmulq_n_f32 (cr4, ti11));
-            ti4 = vsubq_f32 (vmulq_n_f32 (ci5, ti12), vmulq_n_f32 (ci4, ti11));
-            ch_ref (i - 1, 3, k) = vsubq_f32 (tr2, tr5);
-            ch_ref (ic - 1, 2, k) = vaddq_f32 (tr2, tr5);
-            ch_ref (i, 3, k) = vaddq_f32 (ti2, ti5);
-            ch_ref (ic, 2, k) = vsubq_f32 (ti5, ti2);
-            ch_ref (i - 1, 5, k) = vsubq_f32 (tr3, tr4);
-            ch_ref (ic - 1, 4, k) = vaddq_f32 (tr3, tr4);
-            ch_ref (i, 5, k) = vaddq_f32 (ti3, ti4);
-            ch_ref (ic, 4, k) = vsubq_f32 (ti4, ti3);
+            cr2 = _mm_add_ps (dr2, dr5);
+            ci5 = _mm_sub_ps (dr5, dr2);
+            cr5 = _mm_sub_ps (di2, di5);
+            ci2 = _mm_add_ps (di2, di5);
+            cr3 = _mm_add_ps (dr3, dr4);
+            ci4 = _mm_sub_ps (dr4, dr3);
+            cr4 = _mm_sub_ps (di3, di4);
+            ci3 = _mm_add_ps (di3, di4);
+            ch_ref (i - 1, 1, k) = _mm_add_ps (cc_ref (i - 1, k, 1), _mm_add_ps (cr2, cr3));
+            ch_ref (i, 1, k) = _mm_sub_ps (cc_ref (i, k, 1), _mm_add_ps (ci2, ci3)); //
+            tr2 = _mm_add_ps (cc_ref (i - 1, k, 1), _mm_add_ps (mul_scalar (cr2, tr11), mul_scalar (cr3, tr12)));
+            ti2 = _mm_sub_ps (cc_ref (i, k, 1), _mm_add_ps (mul_scalar (ci2, tr11), mul_scalar (ci3, tr12))); //
+            tr3 = _mm_add_ps (cc_ref (i - 1, k, 1), _mm_add_ps (mul_scalar (cr2, tr12), mul_scalar (cr3, tr11)));
+            ti3 = _mm_sub_ps (cc_ref (i, k, 1), _mm_add_ps (mul_scalar (ci2, tr12), mul_scalar (ci3, tr11))); //
+            tr5 = _mm_add_ps (mul_scalar (cr5, ti11), mul_scalar (cr4, ti12));
+            ti5 = _mm_add_ps (mul_scalar (ci5, ti11), mul_scalar (ci4, ti12));
+            tr4 = _mm_sub_ps (mul_scalar (cr5, ti12), mul_scalar (cr4, ti11));
+            ti4 = _mm_sub_ps (mul_scalar (ci5, ti12), mul_scalar (ci4, ti11));
+            ch_ref (i - 1, 3, k) = _mm_sub_ps (tr2, tr5);
+            ch_ref (ic - 1, 2, k) = _mm_add_ps (tr2, tr5);
+            ch_ref (i, 3, k) = _mm_add_ps (ti2, ti5);
+            ch_ref (ic, 2, k) = _mm_sub_ps (ti5, ti2);
+            ch_ref (i - 1, 5, k) = _mm_sub_ps (tr3, tr4);
+            ch_ref (ic - 1, 4, k) = _mm_add_ps (tr3, tr4);
+            ch_ref (i, 5, k) = _mm_add_ps (ti3, ti4);
+            ch_ref (ic, 4, k) = _mm_sub_ps (ti4, ti3);
         }
     }
 #undef cc_ref
 #undef ch_ref
 }
 
-static float32x4_t* rfftf1_ps (int n, const float32x4_t* input_readonly, float32x4_t* work1, float32x4_t* work2, const float* wa, const int* ifac)
+static __m128* rfftf1_ps (int n, const __m128* input_readonly, __m128* work1, __m128* work2, const float* wa, const int* ifac)
 {
-    auto* in = (float32x4_t*) input_readonly;
+    auto* in = (__m128*) input_readonly;
     auto* out = (in == work2 ? work1 : work2);
     int nf = ifac[1], k1;
     int l2 = n;
@@ -848,10 +848,10 @@ static float32x4_t* rfftf1_ps (int n, const float32x4_t* input_readonly, float32
 }
 
 //====================================================================
-static inline void pffft_real_finalize_4x4 (const float32x4_t* in0, const float32x4_t* in1, const float32x4_t* in, const float32x4_t* e, float32x4_t* out)
+static inline void pffft_real_finalize_4x4 (const __m128* in0, const __m128* in1, const __m128* in, const __m128* e, __m128* out)
 {
-    float32x4_t r0, i0, r1, i1, r2, i2, r3, i3;
-    float32x4_t sr0, dr0, sr1, dr1, si0, di0, si1, di1;
+    __m128 r0, i0, r1, i1, r2, i2, r3, i3;
+    __m128 sr0, dr0, sr1, dr1, si0, di0, si1, di1;
     r0 = *in0;
     i0 = *in1;
     r1 = *in++;
@@ -886,23 +886,23 @@ static inline void pffft_real_finalize_4x4 (const float32x4_t* in0, const float3
     //cerr << "matrix initial, real part:\n 1: " << r0 << "\n 1: " << r1 << "\n 1: " << r2 << "\n 1: " << r3 << "\n";
     //cerr << "matrix initial, imag part:\n 1: " << i0 << "\n 1: " << i1 << "\n 1: " << i2 << "\n 1: " << i3 << "\n";
 
-    sr0 = vaddq_f32 (r0, r2);
-    dr0 = vsubq_f32 (r0, r2);
-    sr1 = vaddq_f32 (r1, r3);
-    dr1 = vsubq_f32 (r3, r1);
-    si0 = vaddq_f32 (i0, i2);
-    di0 = vsubq_f32 (i0, i2);
-    si1 = vaddq_f32 (i1, i3);
-    di1 = vsubq_f32 (i3, i1);
+    sr0 = _mm_add_ps (r0, r2);
+    dr0 = _mm_sub_ps (r0, r2);
+    sr1 = _mm_add_ps (r1, r3);
+    dr1 = _mm_sub_ps (r3, r1);
+    si0 = _mm_add_ps (i0, i2);
+    di0 = _mm_sub_ps (i0, i2);
+    si1 = _mm_add_ps (i1, i3);
+    di1 = _mm_sub_ps (i3, i1);
 
-    r0 = vaddq_f32 (sr0, sr1);
-    r3 = vsubq_f32 (sr0, sr1);
-    i0 = vaddq_f32 (si0, si1);
-    i3 = vsubq_f32 (si1, si0);
-    r1 = vaddq_f32 (dr0, di1);
-    r2 = vsubq_f32 (dr0, di1);
-    i1 = vsubq_f32 (dr1, di0);
-    i2 = vaddq_f32 (dr1, di0);
+    r0 = _mm_add_ps (sr0, sr1);
+    r3 = _mm_sub_ps (sr0, sr1);
+    i0 = _mm_add_ps (si0, si1);
+    i3 = _mm_sub_ps (si1, si0);
+    r1 = _mm_add_ps (dr0, di1);
+    r2 = _mm_sub_ps (dr0, di1);
+    i1 = _mm_sub_ps (dr1, di0);
+    i2 = _mm_add_ps (dr1, di0);
 
     *out++ = r0;
     *out++ = i0;
@@ -914,13 +914,13 @@ static inline void pffft_real_finalize_4x4 (const float32x4_t* in0, const float3
     *out++ = i3;
 }
 
-static void pffft_real_finalize (int Ncvec, const float32x4_t* in, float32x4_t* out, const float32x4_t* e)
+static void pffft_real_finalize (int Ncvec, const __m128* in, __m128* out, const __m128* e)
 {
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    float32x4_t cr, ci, *uout = (float32x4_t*) out;
-    float32x4_t save = in[7], zero = {};
+    __m128 cr, ci, *uout = (__m128*) out;
+    __m128 save = in[7], zero = {};
     float xr0, xi0, xr1, xi1, xr2, xi2, xr3, xi3;
     static const float s = M_SQRT2 / 2;
 
@@ -968,12 +968,12 @@ static void pffft_real_finalize (int Ncvec, const float32x4_t* in, float32x4_t* 
 }
 
 //====================================================================
-static inline void pffft_real_preprocess_4x4 (const float32x4_t* in,
-                                              const float32x4_t* e,
-                                              float32x4_t* out,
+static inline void pffft_real_preprocess_4x4 (const __m128* in,
+                                              const __m128* e,
+                                              __m128* out,
                                               int first)
 {
-    float32x4_t r0 = in[0], i0 = in[1], r1 = in[2], i1 = in[3], r2 = in[4], i2 = in[5], r3 = in[6], i3 = in[7];
+    __m128 r0 = in[0], i0 = in[1], r1 = in[2], i1 = in[3], r2 = in[4], i2 = in[5], r3 = in[6], i3 = in[7];
     /*
       transformation for each column is:
 
@@ -987,19 +987,19 @@ static inline void pffft_real_preprocess_4x4 (const float32x4_t* in,
       [0   1  -1   0   1   0   0   1]   [i3]
     */
 
-    auto sr0 = vaddq_f32 (r0, r3), dr0 = vsubq_f32 (r0, r3);
-    auto sr1 = vaddq_f32 (r1, r2), dr1 = vsubq_f32 (r1, r2);
-    auto si0 = vaddq_f32 (i0, i3), di0 = vsubq_f32 (i0, i3);
-    auto si1 = vaddq_f32 (i1, i2), di1 = vsubq_f32 (i1, i2);
+    auto sr0 = _mm_add_ps (r0, r3), dr0 = _mm_sub_ps (r0, r3);
+    auto sr1 = _mm_add_ps (r1, r2), dr1 = _mm_sub_ps (r1, r2);
+    auto si0 = _mm_add_ps (i0, i3), di0 = _mm_sub_ps (i0, i3);
+    auto si1 = _mm_add_ps (i1, i2), di1 = _mm_sub_ps (i1, i2);
 
-    r0 = vaddq_f32 (sr0, sr1);
-    r2 = vsubq_f32 (sr0, sr1);
-    r1 = vsubq_f32 (dr0, si1);
-    r3 = vaddq_f32 (dr0, si1);
-    i0 = vsubq_f32 (di0, di1);
-    i2 = vaddq_f32 (di0, di1);
-    i1 = vsubq_f32 (si0, dr1);
-    i3 = vaddq_f32 (si0, dr1);
+    r0 = _mm_add_ps (sr0, sr1);
+    r2 = _mm_sub_ps (sr0, sr1);
+    r1 = _mm_sub_ps (dr0, si1);
+    r3 = _mm_add_ps (dr0, si1);
+    i0 = _mm_sub_ps (di0, di1);
+    i2 = _mm_add_ps (di0, di1);
+    i1 = _mm_sub_ps (si0, dr1);
+    i3 = _mm_add_ps (si0, dr1);
 
     std::tie (r1, i1) = cplx_mul_conj_v (r1, i1, e[0], e[1]);
     std::tie (r2, i2) = cplx_mul_conj_v (r2, i2, e[2], e[3]);
@@ -1021,12 +1021,12 @@ static inline void pffft_real_preprocess_4x4 (const float32x4_t* in,
     *out++ = i3;
 }
 
-static void pffft_real_preprocess (int Ncvec, const float32x4_t* in, float32x4_t* out, const float32x4_t* e)
+static void pffft_real_preprocess (int Ncvec, const __m128* in, __m128* out, const __m128* e)
 {
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    float32x4_t Xr, Xi, *uout = (float32x4_t*) out;
+    __m128 Xr, Xi, *uout = (__m128*) out;
     float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
     static const float s = M_SQRT2;
     assert (in != out);
@@ -1074,17 +1074,17 @@ static void pffft_real_preprocess (int Ncvec, const float32x4_t* in, float32x4_t
 }
 
 //====================================================================
-static void radb2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, const float* wa1)
+static void radb2_ps (int ido, int l1, const __m128* cc, __m128* ch, const float* wa1)
 {
     static constexpr float minus_two = -2;
     int i, k, l1ido = l1 * ido;
-    float32x4_t a, b, c, d, tr2, ti2;
+    __m128 a, b, c, d, tr2, ti2;
     for (k = 0; k < l1ido; k += ido)
     {
         a = cc[2 * k];
         b = cc[2 * (k + ido) - 1];
-        ch[k] = vaddq_f32 (a, b);
-        ch[k + l1ido] = vsubq_f32 (a, b);
+        ch[k] = _mm_add_ps (a, b);
+        ch[k + l1ido] = _mm_sub_ps (a, b);
     }
     if (ido < 2)
         return;
@@ -1098,10 +1098,10 @@ static void radb2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, c
                 b = cc[2 * (k + ido) - i - 1];
                 c = cc[i + 0 + 2 * k];
                 d = cc[2 * (k + ido) - i + 0];
-                ch[i - 1 + k] = vaddq_f32 (a, b);
-                tr2 = vsubq_f32 (a, b);
-                ch[i + 0 + k] = vsubq_f32 (c, d);
-                ti2 = vaddq_f32 (c, d);
+                ch[i - 1 + k] = _mm_add_ps (a, b);
+                tr2 = _mm_sub_ps (a, b);
+                ch[i + 0 + k] = _mm_sub_ps (c, d);
+                ti2 = _mm_add_ps (c, d);
                 std::tie (tr2, ti2) = cplx_mul (tr2, ti2, wa1[i - 2], wa1[i - 1]);
                 ch[i - 1 + k + l1ido] = tr2;
                 ch[i + 0 + k + l1ido] = ti2;
@@ -1114,27 +1114,27 @@ static void radb2_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, c
     {
         a = cc[2 * k + ido - 1];
         b = cc[2 * k + ido];
-        ch[k + ido - 1] = vaddq_f32 (a, a);
-        ch[k + ido - 1 + l1ido] = vmulq_n_f32 (b, minus_two);
+        ch[k + ido - 1] = _mm_add_ps (a, a);
+        ch[k + ido - 1 + l1ido] = mul_scalar (b, minus_two);
     }
 }
 
-static void radb3_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* wa1, const float* wa2)
+static void radb3_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* wa1, const float* wa2)
 {
     static constexpr float taur = -0.5f;
     static constexpr float taui = 0.866025403784439f;
     static constexpr float taui_2 = 0.866025403784439f * 2;
     int i, k, ic;
-    float32x4_t ci2, ci3, di2, di3, cr2, cr3, dr2, dr3, ti2, tr2;
+    __m128 ci2, ci3, di2, di3, cr2, cr3, dr2, dr3, ti2, tr2;
     for (k = 0; k < l1; k++)
     {
         tr2 = cc[ido - 1 + (3 * k + 1) * ido];
-        tr2 = vaddq_f32 (tr2, tr2);
-        cr2 = vmlaq_n_f32 (cc[3 * k * ido], tr2, taur);
-        ch[k * ido] = vaddq_f32 (cc[3 * k * ido], tr2);
-        ci3 = vmulq_n_f32 (cc[(3 * k + 2) * ido], taui_2);
-        ch[(k + l1) * ido] = vsubq_f32 (cr2, ci3);
-        ch[(k + 2 * l1) * ido] = vaddq_f32 (cr2, ci3);
+        tr2 = _mm_add_ps (tr2, tr2);
+        cr2 = _mm_add_ps (cc[3 * k * ido], mul_scalar (tr2, taur));
+        ch[k * ido] = _mm_add_ps (cc[3 * k * ido], tr2);
+        ci3 = mul_scalar (cc[(3 * k + 2) * ido], taui_2);
+        ch[(k + l1) * ido] = _mm_sub_ps (cr2, ci3);
+        ch[(k + 2 * l1) * ido] = _mm_add_ps (cr2, ci3);
     }
     if (ido == 1)
         return;
@@ -1143,18 +1143,18 @@ static void radb3_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
         for (i = 2; i < ido; i += 2)
         {
             ic = ido - i;
-            tr2 = vaddq_f32 (cc[i - 1 + (3 * k + 2) * ido], cc[ic - 1 + (3 * k + 1) * ido]);
-            cr2 = vmlaq_n_f32 (cc[i - 1 + 3 * k * ido], tr2, taur);
-            ch[i - 1 + k * ido] = vaddq_f32 (cc[i - 1 + 3 * k * ido], tr2);
-            ti2 = vsubq_f32 (cc[i + (3 * k + 2) * ido], cc[ic + (3 * k + 1) * ido]);
-            ci2 = vmlaq_n_f32 (cc[i + 3 * k * ido], ti2, taur);
-            ch[i + k * ido] = vaddq_f32 (cc[i + 3 * k * ido], ti2);
-            cr3 = vmulq_n_f32 (vsubq_f32 (cc[i - 1 + (3 * k + 2) * ido], cc[ic - 1 + (3 * k + 1) * ido]), taui);
-            ci3 = vmulq_n_f32 (vaddq_f32 (cc[i + (3 * k + 2) * ido], cc[ic + (3 * k + 1) * ido]), taui);
-            dr2 = vsubq_f32 (cr2, ci3);
-            dr3 = vaddq_f32 (cr2, ci3);
-            di2 = vaddq_f32 (ci2, cr3);
-            di3 = vsubq_f32 (ci2, cr3);
+            tr2 = _mm_add_ps (cc[i - 1 + (3 * k + 2) * ido], cc[ic - 1 + (3 * k + 1) * ido]);
+            cr2 = _mm_add_ps (cc[i - 1 + 3 * k * ido], mul_scalar (tr2, taur));
+            ch[i - 1 + k * ido] = _mm_add_ps (cc[i - 1 + 3 * k * ido], tr2);
+            ti2 = _mm_sub_ps (cc[i + (3 * k + 2) * ido], cc[ic + (3 * k + 1) * ido]);
+            ci2 = _mm_add_ps (cc[i + 3 * k * ido], mul_scalar (ti2, taur));
+            ch[i + k * ido] = _mm_add_ps (cc[i + 3 * k * ido], ti2);
+            cr3 = mul_scalar (_mm_sub_ps (cc[i - 1 + (3 * k + 2) * ido], cc[ic - 1 + (3 * k + 1) * ido]), taui);
+            ci3 = mul_scalar (_mm_add_ps (cc[i + (3 * k + 2) * ido], cc[ic + (3 * k + 1) * ido]), taui);
+            dr2 = _mm_sub_ps (cr2, ci3);
+            dr3 = _mm_add_ps (cr2, ci3);
+            di2 = _mm_add_ps (ci2, cr3);
+            di3 = _mm_sub_ps (ci2, cr3);
             std::tie (dr2, di2) = cplx_mul (dr2, di2, wa1[i - 2], wa1[i - 1]);
             ch[i - 1 + (k + l1) * ido] = dr2;
             ch[i + (k + l1) * ido] = di2;
@@ -1165,26 +1165,26 @@ static void radb3_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     }
 }
 
-static void radb4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* __restrict wa1, const float* __restrict wa2, const float* __restrict wa3)
+static void radb4_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* __restrict wa1, const float* __restrict wa2, const float* __restrict wa3)
 {
     static constexpr float minus_sqrt2 = -1.414213562373095f;
     int i, k, l1ido = l1 * ido;
-    float32x4_t ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4;
+    __m128 ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4;
     {
-        const float32x4_t* __restrict cc_ = cc, * __restrict ch_end = ch + l1ido;
-        float32x4_t* ch_ = ch;
+        const __m128* __restrict cc_ = cc, * __restrict ch_end = ch + l1ido;
+        __m128* ch_ = ch;
         while (ch < ch_end)
         {
             auto a = cc[0], b = cc[4 * ido - 1];
             auto c = cc[2 * ido], d = cc[2 * ido - 1];
-            tr3 = vaddq_f32 (d, d);
-            tr2 = vaddq_f32 (a, b);
-            tr1 = vsubq_f32 (a, b);
-            tr4 = vaddq_f32 (c, c);
-            ch[0 * l1ido] = vaddq_f32 (tr2, tr3);
-            ch[2 * l1ido] = vsubq_f32 (tr2, tr3);
-            ch[1 * l1ido] = vsubq_f32 (tr1, tr4);
-            ch[3 * l1ido] = vaddq_f32 (tr1, tr4);
+            tr3 = _mm_add_ps (d, d);
+            tr2 = _mm_add_ps (a, b);
+            tr1 = _mm_sub_ps (a, b);
+            tr4 = _mm_add_ps (c, c);
+            ch[0 * l1ido] = _mm_add_ps (tr2, tr3);
+            ch[2 * l1ido] = _mm_sub_ps (tr2, tr3);
+            ch[1 * l1ido] = _mm_sub_ps (tr1, tr4);
+            ch[3 * l1ido] = _mm_add_ps (tr1, tr4);
 
             cc += 4 * ido;
             ch += ido;
@@ -1198,30 +1198,30 @@ static void radb4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     {
         for (k = 0; k < l1ido; k += ido)
         {
-            const auto* __restrict pc = (float32x4_t*) (cc - 1 + 4 * k);
-            auto* __restrict ph = (float32x4_t*) (ch + k + 1);
+            const auto* __restrict pc = (__m128*) (cc - 1 + 4 * k);
+            auto* __restrict ph = (__m128*) (ch + k + 1);
             for (i = 2; i < ido; i += 2)
             {
-                tr1 = vsubq_f32 (pc[i], pc[4 * ido - i]);
-                tr2 = vaddq_f32 (pc[i], pc[4 * ido - i]);
-                ti4 = vsubq_f32 (pc[2 * ido + i], pc[2 * ido - i]);
-                tr3 = vaddq_f32 (pc[2 * ido + i], pc[2 * ido - i]);
-                ph[0] = vaddq_f32 (tr2, tr3);
-                cr3 = vsubq_f32 (tr2, tr3);
+                tr1 = _mm_sub_ps (pc[i], pc[4 * ido - i]);
+                tr2 = _mm_add_ps (pc[i], pc[4 * ido - i]);
+                ti4 = _mm_sub_ps (pc[2 * ido + i], pc[2 * ido - i]);
+                tr3 = _mm_add_ps (pc[2 * ido + i], pc[2 * ido - i]);
+                ph[0] = _mm_add_ps (tr2, tr3);
+                cr3 = _mm_sub_ps (tr2, tr3);
 
-                ti3 = vsubq_f32 (pc[2 * ido + i + 1], pc[2 * ido - i + 1]);
-                tr4 = vaddq_f32 (pc[2 * ido + i + 1], pc[2 * ido - i + 1]);
-                cr2 = vsubq_f32 (tr1, tr4);
-                cr4 = vaddq_f32 (tr1, tr4);
+                ti3 = _mm_sub_ps (pc[2 * ido + i + 1], pc[2 * ido - i + 1]);
+                tr4 = _mm_add_ps (pc[2 * ido + i + 1], pc[2 * ido - i + 1]);
+                cr2 = _mm_sub_ps (tr1, tr4);
+                cr4 = _mm_add_ps (tr1, tr4);
 
-                ti1 = vaddq_f32 (pc[i + 1], pc[4 * ido - i + 1]);
-                ti2 = vsubq_f32 (pc[i + 1], pc[4 * ido - i + 1]);
+                ti1 = _mm_add_ps (pc[i + 1], pc[4 * ido - i + 1]);
+                ti2 = _mm_sub_ps (pc[i + 1], pc[4 * ido - i + 1]);
 
-                ph[1] = vaddq_f32 (ti2, ti3);
+                ph[1] = _mm_add_ps (ti2, ti3);
                 ph += l1ido;
-                ci3 = vsubq_f32 (ti2, ti3);
-                ci2 = vaddq_f32 (ti1, ti4);
-                ci4 = vsubq_f32 (ti1, ti4);
+                ci3 = _mm_sub_ps (ti2, ti3);
+                ci2 = _mm_add_ps (ti1, ti4);
+                ci4 = _mm_sub_ps (ti1, ti4);
                 std::tie (cr2, ci2) = cplx_mul (cr2, ci2, wa1[i - 2], wa1[i - 1]);
                 ph[0] = cr2;
                 ph[1] = ci2;
@@ -1244,18 +1244,18 @@ static void radb4_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
         int i0 = 4 * k + ido;
         auto c = cc[i0 - 1], d = cc[i0 + 2 * ido - 1];
         auto a = cc[i0 + 0], b = cc[i0 + 2 * ido + 0];
-        tr1 = vsubq_f32 (c, d);
-        tr2 = vaddq_f32 (c, d);
-        ti1 = vaddq_f32 (b, a);
-        ti2 = vsubq_f32 (b, a);
-        ch[ido - 1 + k + 0 * l1ido] = vaddq_f32 (tr2, tr2);
-        ch[ido - 1 + k + 1 * l1ido] = vmulq_n_f32 (vsubq_f32 (ti1, tr1), minus_sqrt2);
-        ch[ido - 1 + k + 2 * l1ido] = vaddq_f32 (ti2, ti2);
-        ch[ido - 1 + k + 3 * l1ido] = vmulq_n_f32 (vaddq_f32 (ti1, tr1), minus_sqrt2);
+        tr1 = _mm_sub_ps (c, d);
+        tr2 = _mm_add_ps (c, d);
+        ti1 = _mm_add_ps (b, a);
+        ti2 = _mm_sub_ps (b, a);
+        ch[ido - 1 + k + 0 * l1ido] = _mm_add_ps (tr2, tr2);
+        ch[ido - 1 + k + 1 * l1ido] = mul_scalar (_mm_sub_ps (ti1, tr1), minus_sqrt2);
+        ch[ido - 1 + k + 2 * l1ido] = _mm_add_ps (ti2, ti2);
+        ch[ido - 1 + k + 3 * l1ido] = mul_scalar (_mm_add_ps (ti1, tr1), minus_sqrt2);
     }
 }
 
-static void radb5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32x4_t* __restrict ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4)
+static void radb5_ps (int ido, int l1, const __m128* __restrict cc, __m128* __restrict ch, const float* wa1, const float* wa2, const float* wa3, const float* wa4)
 {
     static constexpr float tr11 = .309016994374947f;
     static constexpr float ti11 = .951056516295154f;
@@ -1266,7 +1266,7 @@ static void radb5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
 
     /* Local variables */
     int i, k, ic;
-    float32x4_t ci2, ci3, ci4, ci5, di3, di4, di5, di2, cr2, cr3, cr5, cr4, ti2, ti3,
+    __m128 ci2, ci3, ci4, ci5, di3, di4, di5, di2, cr2, cr3, cr5, cr4, ti2, ti3,
         ti4, ti5, dr3, dr4, dr5, dr2, tr2, tr3, tr4, tr5;
     int idp2;
 
@@ -1282,19 +1282,19 @@ static void radb5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
     /* Function Body */
     for (k = 1; k <= l1; ++k)
     {
-        ti5 = vaddq_f32 (cc_ref (1, 3, k), cc_ref (1, 3, k));
-        ti4 = vaddq_f32 (cc_ref (1, 5, k), cc_ref (1, 5, k));
-        tr2 = vaddq_f32 (cc_ref (ido, 2, k), cc_ref (ido, 2, k));
-        tr3 = vaddq_f32 (cc_ref (ido, 4, k), cc_ref (ido, 4, k));
-        ch_ref (1, k, 1) = vaddq_f32 (cc_ref (1, 1, k), vaddq_f32 (tr2, tr3));
-        cr2 = vaddq_f32 (cc_ref (1, 1, k), vaddq_f32 (vmulq_n_f32 (tr2, tr11), vmulq_n_f32 (tr3, tr12)));
-        cr3 = vaddq_f32 (cc_ref (1, 1, k), vaddq_f32 (vmulq_n_f32 (tr2, tr12), vmulq_n_f32 (tr3, tr11)));
-        ci5 = vaddq_f32 (vmulq_n_f32 (ti5, ti11), vmulq_n_f32 (ti4, ti12));
-        ci4 = vsubq_f32 (vmulq_n_f32 (ti5, ti12), vmulq_n_f32 (ti4, ti11));
-        ch_ref (1, k, 2) = vsubq_f32 (cr2, ci5);
-        ch_ref (1, k, 3) = vsubq_f32 (cr3, ci4);
-        ch_ref (1, k, 4) = vaddq_f32 (cr3, ci4);
-        ch_ref (1, k, 5) = vaddq_f32 (cr2, ci5);
+        ti5 = _mm_add_ps (cc_ref (1, 3, k), cc_ref (1, 3, k));
+        ti4 = _mm_add_ps (cc_ref (1, 5, k), cc_ref (1, 5, k));
+        tr2 = _mm_add_ps (cc_ref (ido, 2, k), cc_ref (ido, 2, k));
+        tr3 = _mm_add_ps (cc_ref (ido, 4, k), cc_ref (ido, 4, k));
+        ch_ref (1, k, 1) = _mm_add_ps (cc_ref (1, 1, k), _mm_add_ps (tr2, tr3));
+        cr2 = _mm_add_ps (cc_ref (1, 1, k), _mm_add_ps (mul_scalar (tr2, tr11), mul_scalar (tr3, tr12)));
+        cr3 = _mm_add_ps (cc_ref (1, 1, k), _mm_add_ps (mul_scalar (tr2, tr12), mul_scalar (tr3, tr11)));
+        ci5 = _mm_add_ps (mul_scalar (ti5, ti11), mul_scalar (ti4, ti12));
+        ci4 = _mm_sub_ps (mul_scalar (ti5, ti12), mul_scalar (ti4, ti11));
+        ch_ref (1, k, 2) = _mm_sub_ps (cr2, ci5);
+        ch_ref (1, k, 3) = _mm_sub_ps (cr3, ci4);
+        ch_ref (1, k, 4) = _mm_add_ps (cr3, ci4);
+        ch_ref (1, k, 5) = _mm_add_ps (cr2, ci5);
     }
     if (ido == 1)
     {
@@ -1306,32 +1306,32 @@ static void radb5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
         for (i = 3; i <= ido; i += 2)
         {
             ic = idp2 - i;
-            ti5 = vaddq_f32 (cc_ref (i, 3, k), cc_ref (ic, 2, k));
-            ti2 = vsubq_f32 (cc_ref (i, 3, k), cc_ref (ic, 2, k));
-            ti4 = vaddq_f32 (cc_ref (i, 5, k), cc_ref (ic, 4, k));
-            ti3 = vsubq_f32 (cc_ref (i, 5, k), cc_ref (ic, 4, k));
-            tr5 = vsubq_f32 (cc_ref (i - 1, 3, k), cc_ref (ic - 1, 2, k));
-            tr2 = vaddq_f32 (cc_ref (i - 1, 3, k), cc_ref (ic - 1, 2, k));
-            tr4 = vsubq_f32 (cc_ref (i - 1, 5, k), cc_ref (ic - 1, 4, k));
-            tr3 = vaddq_f32 (cc_ref (i - 1, 5, k), cc_ref (ic - 1, 4, k));
-            ch_ref (i - 1, k, 1) = vaddq_f32 (cc_ref (i - 1, 1, k), vaddq_f32 (tr2, tr3));
-            ch_ref (i, k, 1) = vaddq_f32 (cc_ref (i, 1, k), vaddq_f32 (ti2, ti3));
-            cr2 = vaddq_f32 (cc_ref (i - 1, 1, k), vaddq_f32 (vmulq_n_f32 (tr2, tr11), vmulq_n_f32 (tr3, tr12)));
-            ci2 = vaddq_f32 (cc_ref (i, 1, k), vaddq_f32 (vmulq_n_f32 (ti2, tr11), vmulq_n_f32 (ti3, tr12)));
-            cr3 = vaddq_f32 (cc_ref (i - 1, 1, k), vaddq_f32 (vmulq_n_f32 (tr2, tr12), vmulq_n_f32 (tr3, tr11)));
-            ci3 = vaddq_f32 (cc_ref (i, 1, k), vaddq_f32 (vmulq_n_f32 (ti2, tr12), vmulq_n_f32 (ti3, tr11)));
-            cr5 = vaddq_f32 (vmulq_n_f32 (tr5, ti11), vmulq_n_f32 (tr4, ti12));
-            ci5 = vaddq_f32 (vmulq_n_f32 (ti5, ti11), vmulq_n_f32 (ti4, ti12));
-            cr4 = vsubq_f32 (vmulq_n_f32 (tr5, ti12), vmulq_n_f32 (tr4, ti11));
-            ci4 = vsubq_f32 (vmulq_n_f32 (ti5, ti12), vmulq_n_f32 (ti4, ti11));
-            dr3 = vsubq_f32 (cr3, ci4);
-            dr4 = vaddq_f32 (cr3, ci4);
-            di3 = vaddq_f32 (ci3, cr4);
-            di4 = vsubq_f32 (ci3, cr4);
-            dr5 = vaddq_f32 (cr2, ci5);
-            dr2 = vsubq_f32 (cr2, ci5);
-            di5 = vsubq_f32 (ci2, cr5);
-            di2 = vaddq_f32 (ci2, cr5);
+            ti5 = _mm_add_ps (cc_ref (i, 3, k), cc_ref (ic, 2, k));
+            ti2 = _mm_sub_ps (cc_ref (i, 3, k), cc_ref (ic, 2, k));
+            ti4 = _mm_add_ps (cc_ref (i, 5, k), cc_ref (ic, 4, k));
+            ti3 = _mm_sub_ps (cc_ref (i, 5, k), cc_ref (ic, 4, k));
+            tr5 = _mm_sub_ps (cc_ref (i - 1, 3, k), cc_ref (ic - 1, 2, k));
+            tr2 = _mm_add_ps (cc_ref (i - 1, 3, k), cc_ref (ic - 1, 2, k));
+            tr4 = _mm_sub_ps (cc_ref (i - 1, 5, k), cc_ref (ic - 1, 4, k));
+            tr3 = _mm_add_ps (cc_ref (i - 1, 5, k), cc_ref (ic - 1, 4, k));
+            ch_ref (i - 1, k, 1) = _mm_add_ps (cc_ref (i - 1, 1, k), _mm_add_ps (tr2, tr3));
+            ch_ref (i, k, 1) = _mm_add_ps (cc_ref (i, 1, k), _mm_add_ps (ti2, ti3));
+            cr2 = _mm_add_ps (cc_ref (i - 1, 1, k), _mm_add_ps (mul_scalar (tr2, tr11), mul_scalar (tr3, tr12)));
+            ci2 = _mm_add_ps (cc_ref (i, 1, k), _mm_add_ps (mul_scalar (ti2, tr11), mul_scalar (ti3, tr12)));
+            cr3 = _mm_add_ps (cc_ref (i - 1, 1, k), _mm_add_ps (mul_scalar (tr2, tr12), mul_scalar (tr3, tr11)));
+            ci3 = _mm_add_ps (cc_ref (i, 1, k), _mm_add_ps (mul_scalar (ti2, tr12), mul_scalar (ti3, tr11)));
+            cr5 = _mm_add_ps (mul_scalar (tr5, ti11), mul_scalar (tr4, ti12));
+            ci5 = _mm_add_ps (mul_scalar (ti5, ti11), mul_scalar (ti4, ti12));
+            cr4 = _mm_sub_ps (mul_scalar (tr5, ti12), mul_scalar (tr4, ti11));
+            ci4 = _mm_sub_ps (mul_scalar (ti5, ti12), mul_scalar (ti4, ti11));
+            dr3 = _mm_sub_ps (cr3, ci4);
+            dr4 = _mm_add_ps (cr3, ci4);
+            di3 = _mm_add_ps (ci3, cr4);
+            di4 = _mm_sub_ps (ci3, cr4);
+            dr5 = _mm_add_ps (cr2, ci5);
+            dr2 = _mm_sub_ps (cr2, ci5);
+            di5 = _mm_sub_ps (ci2, cr5);
+            di2 = _mm_add_ps (ci2, cr5);
             std::tie (dr2, di2) = cplx_mul (dr2, di2, wa1[i - 3], wa1[i - 2]);
             std::tie (dr3, di3) = cplx_mul (dr3, di3, wa2[i - 3], wa2[i - 2]);
             std::tie (dr4, di4) = cplx_mul (dr4, di4, wa3[i - 3], wa3[i - 2]);
@@ -1351,9 +1351,9 @@ static void radb5_ps (int ido, int l1, const float32x4_t* __restrict cc, float32
 #undef ch_ref
 }
 
-static float32x4_t* rfftb1_ps (int n, const float32x4_t* input_readonly, float32x4_t* work1, float32x4_t* work2, const float* wa, const int* ifac)
+static __m128* rfftb1_ps (int n, const __m128* input_readonly, __m128* work1, __m128* work2, const float* wa, const int* ifac)
 {
-    auto* in = (float32x4_t*) input_readonly;
+    auto* in = (__m128*) input_readonly;
     auto* out = (in == work2 ? work1 : work2);
     int nf = ifac[1], k1;
     int l1 = 1;
@@ -1413,27 +1413,27 @@ static float32x4_t* rfftb1_ps (int n, const float32x4_t* input_readonly, float32
 
 //====================================================================
 /* [0 0 1 2 3 4 5 6 7 8] -> [0 8 7 6 5 4 3 2 1] */
-static void reversed_copy (int N, const float32x4_t* in, int in_stride, float32x4_t* out)
+static void reversed_copy (int N, const __m128* in, int in_stride, __m128* out)
 {
     auto [g0, g1] = interleave2 (in[0], in[1]);
     in += in_stride;
 
-    *--out = vcombine_f32 (vget_low_f32 (g1), vget_high_f32 (g0)); // [g0l, g0h], [g1l g1h] -> [g1l, g0h]
+    *--out = _mm_shuffle_ps (g1, g0, _MM_SHUFFLE (3, 2, 1, 0)); // [g0l, g0h], [g1l g1h] -> [g1l, g0h]
     int k;
     for (k = 1; k < N; ++k)
     {
         auto [h0, h1] = interleave2 (in[0], in[1]);
         in += in_stride;
-        *--out = vcombine_f32 (vget_low_f32 (h0), vget_high_f32 (g1));
-        *--out = vcombine_f32 (vget_low_f32 (h1), vget_high_f32 (h0));
+        *--out = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
+        *--out = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
         g1 = h1;
     }
-    *--out = vcombine_f32 (vget_low_f32 (g0), vget_high_f32 (g1));
+    *--out = _mm_shuffle_ps (g0, g1, _MM_SHUFFLE (3, 2, 1, 0));
 }
 
-static void unreversed_copy (int N, const float32x4_t* in, float32x4_t* out, int out_stride)
+static void unreversed_copy (int N, const __m128* in, __m128* out, int out_stride)
 {
-    float32x4_t g0, g1, h0, h1;
+    __m128 g0, g1, h0, h1;
     int k;
     g0 = g1 = in[0];
     ++in;
@@ -1441,24 +1441,24 @@ static void unreversed_copy (int N, const float32x4_t* in, float32x4_t* out, int
     {
         h0 = *in++;
         h1 = *in++;
-        g1 = vcombine_f32 (vget_low_f32 (h0), vget_high_f32 (g1));
-        h0 = vcombine_f32 (vget_low_f32 (h1), vget_high_f32 (h0));
+        g1 = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
+        h0 = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
         std::tie (out[0], out[1]) = uninterleave2 (h0, g1);
         out += out_stride;
         g1 = h1;
     }
     h0 = *in++;
     h1 = g0;
-    g1 = vcombine_f32 (vget_low_f32 (h0), vget_high_f32 (g1));
-    h0 = vcombine_f32 (vget_low_f32 (h1), vget_high_f32 (h0));
+    g1 = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
+    h0 = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
     std::tie (out[0], out[1]) = uninterleave2 (h0, g1);
 }
 
 static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_direction_t direction)
 {
     int k, N = setup->N, Ncvec = setup->Ncvec;
-    const auto* vin = (const float32x4_t*) in;
-    auto* vout = (float32x4_t*) out;
+    const auto* vin = (const __m128*) in;
+    auto* vout = (__m128*) out;
     assert (in != out);
     if (setup->transform == FFT_REAL)
     {
@@ -1470,8 +1470,8 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
                 std::tie (vout[2 * (0 * dk + k) + 0], vout[2 * (0 * dk + k) + 1]) = interleave2 (vin[k * 8 + 0], vin[k * 8 + 1]);
                 std::tie (vout[2 * (2 * dk + k) + 0], vout[2 * (2 * dk + k) + 1]) = interleave2 (vin[k * 8 + 4], vin[k * 8 + 5]);
             }
-            reversed_copy (dk, vin + 2, 8, (float32x4_t*) (out + N / 2));
-            reversed_copy (dk, vin + 6, 8, (float32x4_t*) (out + N));
+            reversed_copy (dk, vin + 2, 8, (__m128*) (out + N / 2));
+            reversed_copy (dk, vin + 6, 8, (__m128*) (out + N));
         }
         else
         {
@@ -1480,8 +1480,8 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
                 std::tie (vout[k * 8 + 0], vout[k * 8 + 1]) = uninterleave2 (vin[2 * (0 * dk + k) + 0], vin[2 * (0 * dk + k) + 1]);
                 std::tie (vout[k * 8 + 4], vout[k * 8 + 5]) = uninterleave2 (vin[2 * (2 * dk + k) + 0], vin[2 * (2 * dk + k) + 1]);
             }
-            unreversed_copy (dk, (float32x4_t*) (in + N / 4), (float32x4_t*) (out + N - 6 * SIMD_SZ), -8);
-            unreversed_copy (dk, (float32x4_t*) (in + 3 * N / 4), (float32x4_t*) (out + N - 2 * SIMD_SZ), -8);
+            unreversed_copy (dk, (__m128*) (in + N / 4), (__m128*) (out + N - 6 * SIMD_SZ), -8);
+            unreversed_copy (dk, (__m128*) (in + 3 * N / 4), (__m128*) (out + N - 2 * SIMD_SZ), -8);
         }
     }
     else
@@ -1506,18 +1506,18 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
 }
 
 //====================================================================
-void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, float32x4_t* scratch, fft_direction_t direction, int ordered)
+void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, __m128* scratch, fft_direction_t direction, int ordered)
 {
     int k, Ncvec = setup->Ncvec;
     int nf_odd = (setup->ifac[1] & 1);
 
     // temporary buffer is allocated on the stack if the scratch pointer is NULL
     int stack_allocate = (scratch == nullptr ? Ncvec * 2 : 1);
-    auto* scratch_on_stack = (float32x4_t*) alloca (stack_allocate * sizeof (float32x4_t));
+    auto* scratch_on_stack = (__m128*) alloca (stack_allocate * sizeof (__m128));
 
-    const auto* vinput = (const float32x4_t*) finput;
-    auto* voutput = (float32x4_t*) foutput;
-    float32x4_t* buff[2] = { voutput, scratch ? scratch : scratch_on_stack };
+    const auto* vinput = (const __m128*) finput;
+    auto* voutput = (__m128*) foutput;
+    __m128* buff[2] = { voutput, scratch ? scratch : scratch_on_stack };
     int ib = (nf_odd ^ ordered ? 1 : 0);
 
     // assert (VALIGNED (finput) && VALIGNED (foutput));
@@ -1529,17 +1529,17 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
         if (setup->transform == FFT_REAL)
         {
             ib = (rfftf1_ps (Ncvec * 2, vinput, buff[ib], buff[! ib], setup->twiddle, &setup->ifac[0]) == buff[0] ? 0 : 1);
-            pffft_real_finalize (Ncvec, buff[ib], buff[! ib], (float32x4_t*) setup->e);
+            pffft_real_finalize (Ncvec, buff[ib], buff[! ib], (__m128*) setup->e);
         }
         else
         {
-            float32x4_t* tmp = buff[ib];
+            __m128* tmp = buff[ib];
             for (k = 0; k < Ncvec; ++k)
             {
                 std::tie (tmp[k * 2], tmp[k * 2 + 1]) = uninterleave2 (vinput[k * 2], vinput[k * 2 + 1]);
             }
             ib = (cfftf1_ps (Ncvec, buff[ib], buff[! ib], buff[ib], setup->twiddle, &setup->ifac[0], -1) == buff[0] ? 0 : 1);
-            pffft_cplx_finalize (Ncvec, buff[ib], buff[! ib], (float32x4_t*) setup->e);
+            pffft_cplx_finalize (Ncvec, buff[ib], buff[! ib], (__m128*) setup->e);
         }
         if (ordered)
         {
@@ -1562,12 +1562,12 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
         }
         if (setup->transform == FFT_REAL)
         {
-            pffft_real_preprocess (Ncvec, vinput, buff[ib], (float32x4_t*) setup->e);
+            pffft_real_preprocess (Ncvec, vinput, buff[ib], (__m128*) setup->e);
             ib = (rfftb1_ps (Ncvec * 2, buff[ib], buff[0], buff[1], setup->twiddle, &setup->ifac[0]) == buff[0] ? 0 : 1);
         }
         else
         {
-            pffft_cplx_preprocess (Ncvec, vinput, buff[ib], (float32x4_t*) setup->e);
+            pffft_cplx_preprocess (Ncvec, vinput, buff[ib], (__m128*) setup->e);
             ib = (cfftf1_ps (Ncvec, buff[ib], buff[0], buff[1], setup->twiddle, &setup->ifac[0], +1) == buff[0] ? 0 : 1);
             for (k = 0; k < Ncvec; ++k)
             {
@@ -1582,7 +1582,7 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
         assert (finput == foutput);
         for (k = 0; k < Ncvec; ++k)
         {
-            float32x4_t a = buff[ib][2 * k], b = buff[ib][2 * k + 1];
+            __m128 a = buff[ib][2 * k], b = buff[ib][2 * k + 1];
             voutput[2 * k] = a;
             voutput[2 * k + 1] = b;
         }
@@ -1590,4 +1590,4 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
     }
     assert (buff[ib] == voutput);
 }
-} // namespace chowdsp::fft::neon
+} // namespace chowdsp::fft::sse
