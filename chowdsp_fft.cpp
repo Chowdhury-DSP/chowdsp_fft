@@ -25,8 +25,11 @@ void aligned_free (void* p)
 } // namespace chowdsp::fft
 
 #include "simd/chowdsp_fft_impl_common.cpp"
-#if defined(__AVX2__)
-// TODO
+
+#define CHOWDSP_FFT_USE_AVX (defined(__AVX2__))
+
+#if CHOWDSP_FFT_USE_AVX
+#include "simd/chowdsp_fft_impl_avx.cpp"
 #elif defined(__SSE2__)
 #include "simd/chowdsp_fft_impl_sse.cpp"
 #elif defined(__ARM_NEON__)
@@ -37,8 +40,8 @@ namespace chowdsp::fft
 {
 void* fft_new_setup (int N, fft_transform_t transform)
 {
-#if defined(__AVX2__)
-    // TODO
+#if CHOWDSP_FFT_USE_AVX
+    return avx::fft_new_setup (N, transform);
 #elif defined(__SSE2__)
     return sse::fft_new_setup (N, transform);
 #elif defined(__ARM_NEON__)
@@ -48,8 +51,8 @@ void* fft_new_setup (int N, fft_transform_t transform)
 
 void fft_destroy_setup (void* ptr)
 {
-#if defined(__AVX2__)
-    // TODO
+#if CHOWDSP_FFT_USE_AVX
+    return avx::fft_destroy_setup (reinterpret_cast<avx::FFT_Setup*> (ptr));
 #elif defined(__SSE2__)
     return sse::fft_destroy_setup (reinterpret_cast<sse::FFT_Setup*> (ptr));
 #elif defined(__ARM_NEON__)
@@ -59,8 +62,13 @@ void fft_destroy_setup (void* ptr)
 
 void fft_transform (void* setup, const float* input, float* output, float* work, fft_direction_t direction)
 {
-#if defined(__AVX2__)
-    // TODO
+#if CHOWDSP_FFT_USE_AVX
+    return avx::pffft_transform_internal (reinterpret_cast<avx::FFT_Setup*> (setup),
+                                      input,
+                                      output,
+                                      (__m256*) work,
+                                      direction,
+                                      1);
 #elif defined(__SSE2__)
     return sse::pffft_transform_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
                                           input,

@@ -1409,6 +1409,9 @@ static __m128* rfftb1_ps (int n, const __m128* input_readonly, __m128* work1, __
 /* [0 0 1 2 3 4 5 6 7 8] -> [0 8 7 6 5 4 3 2 1] */
 static void reversed_copy (int N, const __m128* in, int in_stride, __m128* out)
 {
+    auto* in_start = in;
+    auto* out_start = out;
+
     auto [g0, g1] = interleave2 (in[0], in[1]);
     in += in_stride;
 
