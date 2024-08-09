@@ -890,13 +890,13 @@ static inline void pffft_real_finalize_4x4 (const __m128* in0, const __m128* in1
     di1 = _mm_sub_ps (i3, i1);
 
     r0 = _mm_add_ps (sr0, sr1);
-    r3 = _mm_sub_ps (sr0, sr1);
     i0 = _mm_add_ps (si0, si1);
-    i3 = _mm_sub_ps (si1, si0);
     r1 = _mm_add_ps (dr0, di1);
-    r2 = _mm_sub_ps (dr0, di1);
     i1 = _mm_sub_ps (dr1, di0);
+    r2 = _mm_sub_ps (dr0, di1);
     i2 = _mm_add_ps (dr1, di0);
+    r3 = _mm_sub_ps (sr0, sr1);
+    i3 = _mm_sub_ps (si1, si0);
 
     *out++ = r0;
     *out++ = i0;
@@ -916,7 +916,7 @@ static void pffft_real_finalize (int Ncvec, const __m128* in, __m128* out, const
     __m128 cr, ci, *uout = (__m128*) out;
     __m128 save = in[7], zero = {};
     float xr0, xi0, xr1, xi1, xr2, xi2, xr3, xi3;
-    static const float s = M_SQRT2 / 2;
+    static constexpr float s = M_SQRT2 / 2;
 
     cr = in[0];
     ci = in[Ncvec * 2 - 1];
@@ -1022,7 +1022,7 @@ static void pffft_real_preprocess (int Ncvec, const __m128* in, __m128* out, con
 
     __m128 Xr, Xi, *uout = (__m128*) out;
     float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
-    static const float s = M_SQRT2;
+    static constexpr float s = M_SQRT2;
     assert (in != out);
     for (k = 0; k < 4; ++k)
     {

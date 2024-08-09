@@ -137,6 +137,15 @@ static inline void cplx_mul (__m256& ar, __m256& ai, float br, float bi)
     ai = _mm256_add_ps (ai, tmp);
 }
 
+static inline void cplx_mul (float& ar, float& ai, float br, float bi)
+{
+    auto tmp = ar * bi;
+    ar = ar * br;
+    ar = ar - (ai * bi);
+    ai = ai * br;
+    ai = ai + tmp;
+}
+
 static inline void cplx_mul_conj (__m256& ar, __m256& ai, float br, float bi)
 {
     auto tmp = mul_scalar (ar, bi);
@@ -1016,55 +1025,95 @@ static __m256* rfftf1_ps (int n, const __m256* input_readonly, __m256* work1, __
 }
 
 //====================================================================
-static inline void pffft_real_finalize_4x4 (const __m256* in0, const __m256* in1, const __m256* in, const __m256* e, __m256* out)
+static inline void pffft_real_finalize_8x8 (__m256 in0, __m256 in1, const __m256* in, const __m256* e, __m256* out)
 {
-    __m256 r0, i0, r1, i1, r2, i2, r3, i3;
-    __m256 sr0, dr0, sr1, dr1, si0, di0, si1, di1;
-    r0 = *in0;
-    i0 = *in1;
+    __m256 r0, i0, r1, i1, r2, i2, r3, i3, r4, i4, r5, i5, r6, i6, r7, i7;
+    __m256 sr00, dr00, sr01, dr01, sr10, dr10, sr11, dr11, si00, di00, si01, di01, si10, di10, si11, di11;
+    __m256 r00, i00, r01, i01, r02, i02, r03, i03, r10, i10, r11, i11, r12, i12, r13, i13, r11_m, i11_m, r13_m, i13_m;
+    r0 = in0;
+    i0 = in1;
     r1 = *in++;
     i1 = *in++;
     r2 = *in++;
     i2 = *in++;
     r3 = *in++;
     i3 = *in++;
-    // transpose4 (r0, r1, r2, r3);
-    // transpose4 (i0, i1, i2, i3);
-
-    /*
-      transformation for each column is:
-
-      [1   1   1   1   0   0   0   0]   [r0]
-      [1   0  -1   0   0  -1   0   1]   [r1]
-      [1   0  -1   0   0   1   0  -1]   [r2]
-      [1  -1   1  -1   0   0   0   0]   [r3]
-      [0   0   0   0   1   1   1   1] * [i0]
-      [0  -1   0   1  -1   0   1   0]   [i1]
-      [0  -1   0   1   1   0  -1   0]   [i2]
-      [0   0   0   0  -1   1  -1   1]   [i3]
-    */
+    r4 = *in++;
+    i4 = *in++;
+    r5 = *in++;
+    i5 = *in++;
+    r6 = *in++;
+    i6 = *in++;
+    r7 = *in++;
+    i7 = *in++;
+    transpose8 (r0, r1, r2, r3, r4, r5, r6, r7);
+    transpose8 (i0, i1, i2, i3, i4, i5, i6, i7);
 
     cplx_mul_v (r1, i1, e[0], e[1]);
     cplx_mul_v (r2, i2, e[2], e[3]);
     cplx_mul_v (r3, i3, e[4], e[5]);
+    cplx_mul_v (r4, i4, e[6], e[7]);
+    cplx_mul_v (r5, i5, e[8], e[9]);
+    cplx_mul_v (r6, i6, e[10], e[11]);
+    cplx_mul_v (r7, i7, e[12], e[13]);
 
-    sr0 = _mm256_add_ps (r0, r2);
-    dr0 = _mm256_sub_ps (r0, r2);
-    sr1 = _mm256_add_ps (r1, r3);
-    dr1 = _mm256_sub_ps (r3, r1);
-    si0 = _mm256_add_ps (i0, i2);
-    di0 = _mm256_sub_ps (i0, i2);
-    si1 = _mm256_add_ps (i1, i3);
-    di1 = _mm256_sub_ps (i3, i1);
+    sr00 = _mm256_add_ps (r0, r4);
+    dr00 = _mm256_sub_ps (r0, r4);
+    sr01 = _mm256_add_ps (r2, r6);
+    dr01 = _mm256_sub_ps (r6, r2);
+    sr10 = _mm256_add_ps (r1, r5);
+    dr10 = _mm256_sub_ps (r1, r5);
+    sr11 = _mm256_add_ps (r3, r7);
+    dr11 = _mm256_sub_ps (r7, r3);
 
-    r0 = _mm256_add_ps (sr0, sr1);
-    r3 = _mm256_sub_ps (sr0, sr1);
-    i0 = _mm256_add_ps (si0, si1);
-    i3 = _mm256_sub_ps (si1, si0);
-    r1 = _mm256_add_ps (dr0, di1);
-    r2 = _mm256_sub_ps (dr0, di1);
-    i1 = _mm256_sub_ps (dr1, di0);
-    i2 = _mm256_add_ps (dr1, di0);
+    si00 = _mm256_add_ps (i0, i4);
+    di00 = _mm256_sub_ps (i0, i4);
+    si01 = _mm256_add_ps (i2, i6);
+    di01 = _mm256_sub_ps (i6, i2);
+    si10 = _mm256_add_ps (i1, i5);
+    di10 = _mm256_sub_ps (i1, i5);
+    si11 = _mm256_add_ps (i3, i7);
+    di11 = _mm256_sub_ps (i7, i3);
+
+    r00 = _mm256_add_ps (sr00, sr01);
+    i00 = _mm256_add_ps (si00, si01);
+    r01 = _mm256_add_ps (dr00, di01);
+    i01 = _mm256_sub_ps (dr01, di00);
+    r02 = _mm256_sub_ps (sr00, sr01);
+    i02 = _mm256_sub_ps (si00, si01);
+    r03 = _mm256_sub_ps (dr00, di01);
+    i03 = _mm256_add_ps (dr01, di00);
+
+    r10 = _mm256_add_ps (sr10, sr11);
+    i10 = _mm256_add_ps (si10, si11);
+    r11 = _mm256_add_ps (dr10, di11);
+    i11 = _mm256_sub_ps (dr11, di10);
+    r12 = _mm256_sub_ps (sr11, sr10);
+    i12 = _mm256_sub_ps (si11, si10);
+    r13 = _mm256_sub_ps (dr10, di11);
+    i13 = _mm256_add_ps (dr11, di10);
+
+    r11_m = mul_scalar (_mm256_add_ps (r11, i11), M_SQRT1_2);
+    i11_m = mul_scalar (_mm256_sub_ps (i11, r11), M_SQRT1_2);
+    r13_m = mul_scalar (_mm256_sub_ps (i13, r13), M_SQRT1_2);
+    i13_m = mul_scalar (_mm256_add_ps (r13, i13), -M_SQRT1_2);
+
+    r0 = _mm256_add_ps (r00, r10);
+    i0 = _mm256_add_ps (i00, i10);
+    r4 = _mm256_sub_ps (r02, i12);
+    i4 = _mm256_add_ps (i02, r12);
+    r2 = _mm256_sub_ps (r03, i13_m);
+    i2 = _mm256_add_ps (r13_m, i03);
+    r6 = _mm256_sub_ps (r01, r11_m);
+    i6 = _mm256_sub_ps (i11_m, i01);
+    r1 = _mm256_add_ps (r01, r11_m);
+    i1 = _mm256_add_ps (i01, i11_m);
+    r5 = _mm256_add_ps (r03, i13_m);
+    i5 = _mm256_sub_ps (r13_m, i03);
+    r3 = _mm256_add_ps (r02, i12);
+    i3 = _mm256_sub_ps (r12, i02);
+    r7 = _mm256_sub_ps (r00, r10);
+    i7 = _mm256_sub_ps (i10, i00);
 
     *out++ = r0;
     *out++ = i0;
@@ -1074,22 +1123,33 @@ static inline void pffft_real_finalize_4x4 (const __m256* in0, const __m256* in1
     *out++ = i2;
     *out++ = r3;
     *out++ = i3;
+    *out++ = r4;
+    *out++ = i4;
+    *out++ = r5;
+    *out++ = i5;
+    *out++ = r6;
+    *out++ = i6;
+    *out++ = r7;
+    *out++ = i7;
 }
 
 static void pffft_real_finalize (int Ncvec, const __m256* in, __m256* out, const __m256* e)
 {
-    int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
+    int k, dk = Ncvec / (int) SIMD_SZ; // number of 8x8 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    __m256 cr, ci, *uout = (__m256*) out;
-    __m256 save = in[7], zero = {};
+    auto* uout = (__m256*) out;
+    __m256 save = in[15], zero = {};
     float xr0, xi0, xr1, xi1, xr2, xi2, xr3, xi3;
-    static const float s = M_SQRT2 / 2;
+    static constexpr float s = M_SQRT2 / 2;
+    static constexpr float s2 = 0.49991444982f;
+    const auto s8 = 0.38268343236508977f;
+    const auto c8 = 0.9238795325112868f;
 
-    cr = in[0];
-    ci = in[Ncvec * 2 - 1];
+    const auto cr = in[0];
+    const auto ci = in[Ncvec * 2 - 1];
     assert (in != out);
-    pffft_real_finalize_4x4 (&zero, &zero, in + 1, e, out);
+    pffft_real_finalize_8x8 (zero, zero, in + 1, e, out);
 
     /*
     [cr0 cr1 cr2 cr3 ci0 ci1 ci2 ci3]
@@ -1102,29 +1162,67 @@ static void pffft_real_finalize (int Ncvec, const __m256* in, __m256* out, const
     [Xi(N/4) ] [0   0   0   0   0  -s  -1  -s]
     [Xi(N/2) ] [0  -1   0   1   0   0   0   0]
     [Xi(3N/4)] [0   0   0   0   0  -s   1  -s]
+
+    [Xr(1)]  ] [1   1   1   1   1   1   1   1   0   0   0   0   0   0   0   0]
+    [Xi(1)   ] [1  -1   1  -1   1  -1   1  -1   0   0   0   0   0   0   0   0]
+    [Xr(N/2) ] [1   0  -1   0   1   0  -1   0   0   0   0   0   0   0   0   0]
+    [Xi(N/2) ] [0  -1   0   1   0  -1   0   1   0   0   0   0   0   0   0   0]
+    [Xr(N/4) ] [0   0   0   0   0   0   0   0   1   s   0  -s   1   s   0  -s] * s2
+    [Xi(N/4) ] [0   0   0   0   0   0   0   0   0  -s  -1  -s   0  -s  -1  -s] * s2
+    [Xr(3N/4)] [0   0   0   0   0   0   0   0   1  -s   0   s   1  -s   0   s] * s2
+    [Xi(3N/4)] [0   0   0   0   0   0   0   0   0  -s   1  -s   0  -s   1  -s] * s2
+
+    [Xr(N/8) ] [0   0   0   0   0   0   0   0   1   s   0   s   1   s   0   s]
+    [Xi(N/8) ] [0   0   0   0   0   0   0   0   0   s   1   s   0   s   1   s]
+    [Xr(5N/8)] [0   0   0   0   0   0   0   0   1  -s   0   s   1  -s   0   s] * s2
+    [Xi(5N/8)] [0   0   0   0   0   0   0   0   0   s   1   s   0   s   1   s]
+    [Xr(3N/8)] [0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0]
+    [Xi(3N/8)] [0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0]
+    [Xr(7N/8)] [0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0]
+    [Xi(7N/8)] [0   0   0   0   0   0   0   0   0   0   0   0   0   0   0   0]
   */
 
-    xr0 = (cr[0] + cr[2]) + (cr[1] + cr[3]);
-    uout[0][0] = xr0;
-    xi0 = (cr[0] + cr[2]) - (cr[1] + cr[3]);
-    uout[1][0] = xi0;
-    xr2 = (cr[0] - cr[2]);
-    uout[4][0] = xr2;
-    xi2 = (cr[3] - cr[1]);
-    uout[5][0] = xi2;
-    xr1 = ci[0] + s * (ci[1] - ci[3]);
-    uout[2][0] = xr1;
-    xi1 = -ci[2] - s * (ci[1] + ci[3]);
-    uout[3][0] = xi1;
-    xr3 = ci[0] - s * (ci[1] - ci[3]);
-    uout[6][0] = xr3;
-    xi3 = ci[2] - s * (ci[1] + ci[3]);
-    uout[7][0] = xi3;
+    auto r00 = (cr[0] + cr[2]) + (cr[1] + cr[3]);
+    auto r01 = (cr[0] + cr[2]) - (cr[1] + cr[3]);
+    auto r02 = cr[0] - cr[2];
+    auto r03 = cr[3] - cr[1];
+    auto i00 = ci[0] + s * (ci[1] - ci[3]);
+    auto i01 = -ci[2] - s * (ci[1] + ci[3]);
+    auto i02 = ci[0] - s * (ci[1] - ci[3]);
+    auto i03 = ci[2] - s * (ci[1] + ci[3]);
+
+    auto r10 = (cr[4] + cr[6]) + (cr[5] + cr[7]);
+    auto r11 = (cr[4] + cr[6]) - (cr[5] + cr[7]);
+    auto r12 = cr[4] - cr[6];
+    auto r13 = cr[7] - cr[5];
+    auto i10 = ci[4] + s * (ci[5] - ci[7]);
+    auto i11 = -ci[6] - s * (ci[5] + ci[7]);
+    auto i12 = ci[4] - s * (ci[5] - ci[7]);
+    auto i13 = ci[6] - s * (ci[5] + ci[7]);
+
+    // @TODO: re-compute these using Temperton (should only require add/subtract)
+    uout[0][0] = r00 + r10;
+    uout[1][0] = r01 + r11;
+    uout[8][0] = r02 + r12;
+    uout[9][0] = r03 + r13;
+    uout[4][0] = s2 * (i00 + i10);
+    uout[5][0] = s2 * (i01 + i11);
+    uout[12][0] = s2 * (i02 + i12);
+    uout[13][0] = s2 * (i03 + i13);
+
+    uout[2][0] = ci[0] + c8 * (ci[1] - ci[7]) + s * (ci[2] - ci[6]) + s8 * (ci[3] - ci[5]);
+    uout[3][0] = -ci[4] - s8 * (ci[1] + ci[7]) - s * (ci[2] + ci[6]) - c8 * (ci[3] + ci[5]);
+    uout[6][0] = ci[0] + s8 * (ci[1] - ci[7]) - s * (ci[2] - ci[6]) - c8 * (ci[3] - ci[5]);
+    uout[7][0] = ci[4] - c8 * (ci[1] + ci[7]) - s * (ci[2] + ci[6]) + s8 * (ci[3] + ci[5]);
+    uout[10][0] = ci[0] - s8 * (ci[1] - ci[7]) - s * (ci[2] - ci[6]) + c8 * (ci[3] - ci[5]);
+    uout[11][0] = -ci[4] - c8 * (ci[1] + ci[7]) + s * (ci[2] + ci[6]) + s8 * (ci[3] + ci[5]);
+    uout[14][0] = ci[0] - c8 * (ci[1] - ci[7]) + s * (ci[2] - ci[6]) - s8 * (ci[3] - ci[5]);
+    uout[15][0] = ci[4] - s8 * (ci[1] + ci[7]) + s * (ci[2] + ci[6]) - c8 * (ci[3] + ci[5]);
 
     for (k = 1; k < dk; ++k)
     {
-        auto save_next = in[8 * k + 7];
-        pffft_real_finalize_4x4 (&save, &in[8 * k + 0], in + 8 * k + 1, e + k * 6, out + k * 8);
+        auto save_next = in[16 * k + 15];
+        pffft_real_finalize_8x8 (save, in[16 * k + 0], in + 16 * k + 1, e + k * 14, out + k * 16);
         save = save_next;
     }
 }
@@ -1190,7 +1288,7 @@ static void pffft_real_preprocess (int Ncvec, const __m256* in, __m256* out, con
 
     __m256 Xr, Xi, *uout = (__m256*) out;
     float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
-    static const float s = M_SQRT2;
+    static constexpr float s = M_SQRT2;
     assert (in != out);
     for (k = 0; k < 4; ++k)
     {
@@ -1578,21 +1676,32 @@ static __m256* rfftb1_ps (int n, const __m256* input_readonly, __m256* work1, __
 static void reversed_copy (int N, const __m256* in, int in_stride, __m256* out)
 {
     __m256 g0, g1;
-    interleave2 (in[0], in[1], g0, g1);
+    g0 = _mm256_unpacklo_ps (in[0], in[1]);
+    g1 = _mm256_unpackhi_ps (in[0], in[1]);
+    // interleave2 (in[0], in[1], g0, g1);
     in += in_stride;
 
-    *--out = _mm256_shuffle_ps (g1, g0, _MM_SHUFFLE (3, 2, 1, 0)); // [g0l, g0h], [g1l g1h] -> [g1l, g0h]
+    const __m256i mask_g0 = _mm256_setr_epi32 (0, 1, 6, 7, 4, 5, 2, 3);
+    auto g0_masked = _mm256_permutevar8x32_ps (g0, mask_g0);
+
+    g0 = _mm256_permute2f128_ps (g0_masked, g1, 0 | (3 << 4));
+    g1 = _mm256_permute2f128_ps (g0_masked, g1, 1 | (2 << 4));
+
+    const __m256i mask_order = _mm256_setr_epi32 (0, 1, 6, 7, 4, 5, 2, 3);
+    *--out = _mm256_permutevar8x32_ps (g1, mask_order);
+
     int k;
     __m256 h0, h1;
     for (k = 1; k < N; ++k)
     {
+        assert (false);
         interleave2 (in[0], in[1], h0, h1);
         in += in_stride;
         *--out = _mm256_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
         *--out = _mm256_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
         g1 = h1;
     }
-    *--out = _mm256_shuffle_ps (g0, g1, _MM_SHUFFLE (3, 2, 1, 0));
+    *--out = _mm256_permutevar8x32_ps (g0, mask_order);
 }
 
 static void unreversed_copy (int N, const __m256* in, __m256* out, int out_stride)
@@ -1621,21 +1730,26 @@ static void unreversed_copy (int N, const __m256* in, __m256* out, int out_strid
 static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_direction_t direction)
 {
     int k, N = setup->N, Ncvec = setup->Ncvec;
-    const auto* vin = (const __m256*) in;
+    auto* vin = (const __m256*) in;
     auto* vout = (__m256*) out;
     assert (in != out);
     if (setup->transform == FFT_REAL)
     {
-        int dk = N / 32;
+        int dk = N / 128;
         if (direction == FFT_FORWARD)
         {
             for (k = 0; k < dk; ++k)
             {
-                interleave2 (vin[k * 8 + 0], vin[k * 8 + 1], vout[2 * (0 * dk + k) + 0], vout[2 * (0 * dk + k) + 1]);
-                interleave2 (vin[k * 8 + 4], vin[k * 8 + 5], vout[2 * (2 * dk + k) + 0], vout[2 * (2 * dk + k) + 1]);
+                interleave2 (vin[k * 16 + 0], vin[k * 16 + 1], vout[2 * (0 * dk + k) + 0], vout[2 * (0 * dk + k) + 1]);
+                interleave2 (vin[k * 16 + 4], vin[k * 16 + 5], vout[2 * (2 * dk + k) + 0], vout[2 * (2 * dk + k) + 1]);
+                interleave2 (vin[k * 16 + 8], vin[k * 16 + 9], vout[2 * (4 * dk + k) + 0], vout[2 * (4 * dk + k) + 1]);
+                interleave2 (vin[k * 16 + 12], vin[k * 16 + 13], vout[2 * (6 * dk + k) + 0], vout[2 * (6 * dk + k) + 1]);
             }
-            reversed_copy (dk, vin + 2, 8, (__m256*) (out + N / 2));
-            reversed_copy (dk, vin + 6, 8, (__m256*) (out + N));
+
+            reversed_copy (dk, vin + 2, 8, (__m256*) (out + N / 4));
+            reversed_copy (dk, vin + 6, 8, (__m256*) (out + N / 2));
+            reversed_copy (dk, vin + 10, 8, (__m256*) (out + N * 3 / 4));
+            reversed_copy (dk, vin + 14, 8, (__m256*) (out + N));
         }
         else
         {
