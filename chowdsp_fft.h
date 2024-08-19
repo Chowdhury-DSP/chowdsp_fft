@@ -23,7 +23,7 @@ typedef enum
   FFT_Setup structure is read-only so it can safely be shared by
   multiple concurrent threads.
 */
-void* fft_new_setup (int N, fft_transform_t transform);
+void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available = true);
 void fft_destroy_setup (void*);
 
 /*

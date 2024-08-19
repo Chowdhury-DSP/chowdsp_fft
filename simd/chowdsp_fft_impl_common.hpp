@@ -1,6 +1,6 @@
 namespace chowdsp::fft::common
 {
-static int decompose (int n, int* ifac, const int* ntryh)
+static inline int decompose (int n, int* ifac, const int* ntryh)
 {
     int nl = n, nf = 0, i, j;
     for (j = 0; ntryh[j]; ++j)
@@ -33,7 +33,7 @@ static int decompose (int n, int* ifac, const int* ntryh)
     return nf;
 }
 
-static void rffti1_ps (int n, float* wa, int* ifac)
+static inline void rffti1_ps (int n, float* wa, int* ifac)
 {
     static constexpr int ntryh[] = { 4, 2, 3, 5, 0 };
     int k1, j, ii;
@@ -69,7 +69,7 @@ static void rffti1_ps (int n, float* wa, int* ifac)
     }
 }
 
-void cffti1_ps (int n, float* wa, int* ifac)
+void inline cffti1_ps (int n, float* wa, int* ifac)
 {
     static constexpr int ntryh[] = { 5, 3, 4, 2, 0 };
     int k1, j, ii;

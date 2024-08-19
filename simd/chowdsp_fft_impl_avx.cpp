@@ -1,7 +1,11 @@
 #include <immintrin.h>
 #include <iostream>
 #include <ostream>
+#include <cassert>
 #include <tuple>
+
+#include "../chowdsp_fft.h"
+#include "chowdsp_fft_impl_common.hpp"
 
 namespace chowdsp::fft::avx
 {
@@ -18,7 +22,7 @@ struct FFT_Setup
     float* twiddle; // points into 'data', N/4 elements
 };
 
-static FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
+FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
 {
     auto* s = (FFT_Setup*) malloc (sizeof (FFT_Setup));
     /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
@@ -77,7 +81,7 @@ static FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
     return s;
 }
 
-static void fft_destroy_setup (FFT_Setup* s)
+void fft_destroy_setup (FFT_Setup* s)
 {
     aligned_free (s->data);
     free (s);
@@ -1841,8 +1845,10 @@ static void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_directi
 }
 
 //====================================================================
-void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, __m256* scratch, fft_direction_t direction, int ordered)
+void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch_ptr, fft_direction_t direction, int ordered)
 {
+    auto* scratch = (__m256*) scratch_ptr;
+
     int k, Ncvec = setup->Ncvec;
     int nf_odd = (setup->ifac[1] & 1);
 
