@@ -135,8 +135,27 @@ static bool cpu_supports_avx()
     const auto fma3_sse42 = regs1[2] >> 12 & sse_state_os_enabled;
 
     const auto avx = regs1[2] >> 28 & avx_state_os_enabled;
-    const auto fma3_avx = avx && fma3_sse42;
-    return fma3_avx;
+    [[maybe_unused]] const auto fma3_avx = avx && fma3_sse42;
+
+    int regs8[4];
+    get_cpuid(regs8, 0x80000001);
+    [[maybe_unused]] const auto fma4 = regs8[2] >> 16 & avx_state_os_enabled;
+
+    // sse4a = regs[2] >> 6 & 1;
+
+    // xop = regs[2] >> 11 & 1;
+
+    int regs7[4];
+    get_cpuid(regs7, 0x7);
+    const auto avx2 = regs7[1] >> 5 & avx_state_os_enabled;
+
+    int regs7a[4];
+    get_cpuid(regs7a, 0x7, 0x1);
+    [[maybe_unused]] const auto avxvnni = regs7a[0] >> 4 & avx_state_os_enabled;
+
+    const auto fma3_avx2 = avx2 && fma3_sse42;
+
+    return fma3_avx2;
 }
 
 void set_pointer_is_sse_setup (void*& ptr)

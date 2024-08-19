@@ -139,56 +139,40 @@ static inline void cplx_mul (__m256& ar, __m256& ai, float br, float bi)
 {
     auto tmp = mul_scalar (ar, bi);
     ar = mul_scalar (ar, br);
-    ar = _mm256_sub_ps (ar, mul_scalar (ai, bi));
-    ai = mul_scalar (ai, br);
-    ai = _mm256_add_ps (ai, tmp);
-}
-
-static inline void cplx_mul (float& ar, float& ai, float br, float bi)
-{
-    auto tmp = ar * bi;
-    ar = ar * br;
-    ar = ar - (ai * bi);
-    ai = ai * br;
-    ai = ai + tmp;
+    ar = _mm256_fnmadd_ps (ai, _mm256_set1_ps (bi), ar);
+    ai = _mm256_fmadd_ps (ai, _mm256_set1_ps (br), tmp);
 }
 
 static inline void cplx_mul_conj (__m256& ar, __m256& ai, float br, float bi)
 {
     auto tmp = mul_scalar (ar, bi);
     ar = mul_scalar (ar, br);
-    ar = _mm256_add_ps (ar, mul_scalar (ai, bi));
-    ai = mul_scalar (ai, br);
-    ai = _mm256_sub_ps (ai, tmp);
+    ar = _mm256_fmadd_ps (ai, _mm256_set1_ps (bi), ar);
+    ai = _mm256_fmsub_ps (ai, _mm256_set1_ps (br), tmp);
 }
 
 static inline void cplx_mul_conj (__m256& yr, __m256& yi, __m256 ar, __m256 ai, float br, float bi)
 {
     auto tmp = mul_scalar (ar, bi);
     ar = mul_scalar (ar, br);
-    ar = _mm256_add_ps (ar, mul_scalar (ai, bi));
-    ai = mul_scalar (ai, br);
-    ai = _mm256_sub_ps (ai, tmp);
-    yr = ar;
-    yi = ai;
+    yr = _mm256_fmadd_ps (ai, _mm256_set1_ps (bi), ar);
+    yi = _mm256_fmsub_ps (ai, _mm256_set1_ps (br), tmp);
 }
 
 static inline auto cplx_mul_v (__m256& ar, __m256& ai, __m256 br, __m256 bi)
 {
     auto tmp = _mm256_mul_ps (ar, bi);
     ar = _mm256_mul_ps (ar, br);
-    ar = _mm256_sub_ps (ar, _mm256_mul_ps (ai, bi));
-    ai = _mm256_mul_ps (ai, br);
-    ai = _mm256_add_ps (ai, tmp);
+    ar = _mm256_fnmadd_ps (ai, bi, ar);
+    ai = _mm256_fmadd_ps (ai, br, tmp);
 }
 
 static inline auto cplx_mul_conj_v (__m256& ar, __m256& ai, __m256 br, __m256 bi)
 {
     auto tmp = _mm256_mul_ps (ar, bi);
     ar = _mm256_mul_ps (ar, br);
-    ar = _mm256_add_ps (ar, _mm256_mul_ps (ai, bi));
-    ai = _mm256_mul_ps (ai, br);
-    ai = _mm256_sub_ps (ai, tmp);
+    ar = _mm256_fmadd_ps (ai, bi, ar);
+    ai = _mm256_fmsub_ps (ai, br, tmp);
 }
 
 static inline void transpose8 (__m256& row0, __m256& row1, __m256& row2, __m256& row3, __m256& row4, __m256& row5, __m256& row6, __m256& row7)
