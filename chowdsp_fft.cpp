@@ -50,7 +50,7 @@ static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
 
 namespace chowdsp::fft
 {
-#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+#if defined(__SSE2__) && CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
 // borrowed from XSIMD: https://github.com/xtensor-stack/xsimd/blob/master/include/xsimd/config/xsimd_cpuid.hpp#L124
 static bool cpu_supports_avx()
 {

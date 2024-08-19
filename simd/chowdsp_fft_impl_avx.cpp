@@ -1,3 +1,5 @@
+#if defined (__SSE2__)
+
 #include <immintrin.h>
 #include <cassert>
 #include <cmath>
@@ -1933,3 +1935,4 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
     assert (buff[ib] == voutput);
 }
 } // namespace chowdsp::fft::avx
+#endif
