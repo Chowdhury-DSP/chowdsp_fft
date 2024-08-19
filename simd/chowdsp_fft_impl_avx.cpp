@@ -1,8 +1,6 @@
 #include <immintrin.h>
-#include <iostream>
-#include <ostream>
 #include <cassert>
-#include <tuple>
+#include <cmath>
 
 #include "../chowdsp_fft.h"
 #include "chowdsp_fft_impl_common.hpp"
@@ -24,18 +22,21 @@ struct FFT_Setup
 
 FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
 {
-    auto* s = (FFT_Setup*) malloc (sizeof (FFT_Setup));
     /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
        and 32 for real FFTs -- a lot of stuff would need to be rewritten to
        handle other cases (or maybe just switch to a scalar fft, I don't know..) */
     if (transform == FFT_REAL)
     {
-        assert ((N % (2 * SIMD_SZ * SIMD_SZ)) == 0 && N > 0);
+        if (! ((N % (2 * SIMD_SZ * SIMD_SZ)) == 0 && N > 0))
+            return nullptr;
     }
     if (transform == FFT_COMPLEX)
     {
-        assert ((N % (SIMD_SZ * SIMD_SZ)) == 0 && N > 0);
+        if (! ((N % (SIMD_SZ * SIMD_SZ)) == 0 && N > 0))
+            return nullptr;
     }
+
+    auto* s = (FFT_Setup*) malloc (sizeof (FFT_Setup));
     //assert((N % 32) == 0);
     s->N = N;
     s->transform = transform;

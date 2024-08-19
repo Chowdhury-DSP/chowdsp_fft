@@ -158,7 +158,7 @@ bool check_is_pointer_sse_setup (void* ptr)
 }
 #endif
 
-void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available)
+void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use_avx_if_available)
 {
 #if defined(__SSE2__)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
@@ -166,7 +166,9 @@ void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available
     {
         if (cpu_supports_avx())
         {
-            return avx::fft_new_setup (N, transform);
+            auto* setup_ptr = avx::fft_new_setup (N, transform);
+            if (setup_ptr != nullptr)
+                return setup_ptr;
         }
     }
     void* ptr = sse::fft_new_setup (N, transform);
