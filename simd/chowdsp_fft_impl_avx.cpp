@@ -1141,7 +1141,6 @@ static void pffft_real_finalize (int Ncvec, const __m256* in, __m256* out, const
     auto* uout = (__m256*) out;
     __m256 save = in[15], zero = {};
     static constexpr float s = M_SQRT2 / 2;
-    static constexpr float s2 = 0.49991444982f;
     static constexpr auto s8 = 0.38268343236508977f;
     static constexpr auto c8 = 0.9238795325112868f;
 
@@ -1199,45 +1198,96 @@ static void pffft_real_finalize (int Ncvec, const __m256* in, __m256* out, const
 }
 
 //====================================================================
-static inline void pffft_real_preprocess_4x4 (const __m256* in,
+static inline void pffft_real_preprocess_8x8 (const __m256* in,
                                               const __m256* e,
                                               __m256* out,
                                               int first)
 {
-    __m256 r0 = in[0], i0 = in[1], r1 = in[2], i1 = in[3], r2 = in[4], i2 = in[5], r3 = in[6], i3 = in[7];
-    /*
-      transformation for each column is:
+    __m256 r0 = in[0], i0 = in[1];
+    __m256 r1 = in[2], i1 = in[3];
+    __m256 r2 = in[4], i2 = in[5];
+    __m256 r3 = in[6], i3 = in[7];
+    __m256 r4 = in[8], i4 = in[9];
+    __m256 r5 = in[10], i5 = in[11];
+    __m256 r6 = in[12], i6 = in[13];
+    __m256 r7 = in[14], i7 = in[15];
 
-      [1   1   1   1   0   0   0   0]   [r0]
-      [1   0   0  -1   0  -1  -1   0]   [r1]
-      [1  -1  -1   1   0   0   0   0]   [r2]
-      [1   0   0  -1   0   1   1   0]   [r3]
-      [0   0   0   0   1  -1   1  -1] * [i0]
-      [0  -1   1   0   1   0   0   1]   [i1]
-      [0   0   0   0   1   1  -1  -1]   [i2]
-      [0   1  -1   0   1   0   0   1]   [i3]
-    */
+    auto sr00 = _mm256_add_ps (r0, r7);
+    auto dr00 = _mm256_sub_ps (r0, r7);
+    auto sr01 = _mm256_add_ps (r3, r4);
+    auto dr01 = _mm256_sub_ps (r3, r4);
+    auto sr10 = _mm256_add_ps (r2, r5);
+    auto dr10 = _mm256_sub_ps (r2, r5);
+    auto sr11 = _mm256_add_ps (r1, r6);
+    auto dr11 = _mm256_sub_ps (r1, r6);
 
-    auto sr0 = _mm256_add_ps (r0, r3), dr0 = _mm256_sub_ps (r0, r3);
-    auto sr1 = _mm256_add_ps (r1, r2), dr1 = _mm256_sub_ps (r1, r2);
-    auto si0 = _mm256_add_ps (i0, i3), di0 = _mm256_sub_ps (i0, i3);
-    auto si1 = _mm256_add_ps (i1, i2), di1 = _mm256_sub_ps (i1, i2);
+    auto si00 = _mm256_add_ps (i0, i7);
+    auto di00 = _mm256_sub_ps (i0, i7);
+    auto si01 = _mm256_add_ps (i3, i4);
+    auto di01 = _mm256_sub_ps (i3, i4);
+    auto si10 = _mm256_add_ps (i2, i5);
+    auto di10 = _mm256_sub_ps (i2, i5);
+    auto si11 = _mm256_add_ps (i1, i6);
+    auto di11 = _mm256_sub_ps (i1, i6);
 
-    r0 = _mm256_add_ps (sr0, sr1);
-    r2 = _mm256_sub_ps (sr0, sr1);
-    r1 = _mm256_sub_ps (dr0, si1);
-    r3 = _mm256_add_ps (dr0, si1);
-    i0 = _mm256_sub_ps (di0, di1);
-    i2 = _mm256_add_ps (di0, di1);
-    i1 = _mm256_sub_ps (si0, dr1);
-    i3 = _mm256_add_ps (si0, dr1);
+    auto r00 = _mm256_add_ps (sr00, sr01);
+    auto i00 = _mm256_sub_ps (di00, di01);
+    auto r01 = _mm256_sub_ps (dr00, si01);
+    auto i01 = _mm256_sub_ps (si00, dr01);
+    auto r02 = _mm256_sub_ps (sr00, sr01);
+    auto i02 = _mm256_add_ps (di00, di01);
+    auto r03 = _mm256_add_ps (dr00, si01);
+    auto i03 = _mm256_add_ps (si00, dr01);
+
+    auto r10 = _mm256_add_ps (sr10, sr11);
+    auto i10 = _mm256_sub_ps (di10, di11);
+    auto r11 = _mm256_sub_ps (dr10, si11); // (r2 - r5) - (i1 + i6)
+    auto i11 = _mm256_sub_ps (dr11, si10); // (r1 - r6) - (i2 + i5)
+    auto r12 = _mm256_sub_ps (sr10, sr11);
+    auto i12 = _mm256_add_ps (di10, di11);
+    auto r13 = _mm256_add_ps (dr10, si11); // (r2 - r5) + (i1 + i6)
+    auto i13 = _mm256_add_ps (si10, dr11); // (r1 - r6) + (i2 + i5)
+
+    auto r11_m = mul_scalar (_mm256_add_ps (r11, i11), M_SQRT1_2);
+    auto i11_m = mul_scalar (_mm256_sub_ps (r11, i11), M_SQRT1_2);
+    auto r13_m = mul_scalar (_mm256_add_ps (r13, i13), -M_SQRT1_2);
+    auto i13_m = mul_scalar (_mm256_sub_ps (r13, i13), M_SQRT1_2);
+
+    // (() ()) (() ())
+    r0 = _mm256_add_ps (r00, r10);
+    i0 = _mm256_add_ps (i00, i10); // ((i0 - i7) - (i3 - i4)) + ((i2 - i5) - (i1 - i6))
+
+    r1 = _mm256_add_ps (r01, r11_m); // ((r0 - r7) - (i3 + i4)) + s * (() ())
+    i1 = _mm256_add_ps (i01, i11_m); // ((i0 + i7) - (r3 - r4)) + s * (() ())
+
+    r2 = _mm256_sub_ps (r02, i12); // ((r0 + r7) - (r3 + r4)) - ((i2 - i5) + (i1 - i6))
+    i2 = _mm256_add_ps (i02, r12); // ((i0 - i7) + (i3 - i4)) + ((r2 + r5) - (r1 + r6))
+
+    r3 = _mm256_add_ps (r03, r13_m); // ((r0 - r7) + (i3 + i4)) + s * (() ())
+    i3 = _mm256_add_ps (i03, i13_m); // ((i0 + i7) + (r3 - r4)) + s * (() ())
+
+    r4 = _mm256_sub_ps (r00, r10); // ((r0 + r7) + (r3 + r4)) - ((r2 + r5) + (r1 + r6))
+    i4 = _mm256_sub_ps (i00, i10); // ((i0 - i7) - (i3 - i4)) - ((i2 - i5) - (i1 - i6))
+
+    r5 = _mm256_sub_ps (r01, r11_m); // ((r0 - r7) - (i3 + i4)) - s * (() ())
+    i5 = _mm256_sub_ps (i01, i11_m); // ((i0 + i7) - (r3 - r4)) - s * (() ())
+
+    r6 = _mm256_add_ps (r02, i12);; // ((r0 + r7) - (r3 + r4)) + ((i2 - i5) + (i1 - i6))
+    i6 = _mm256_sub_ps (i02, r12); // ((i0 - i7) + (i3 - i4)) - ((r2 + r5) - (r1 + r6))
+
+    r7 = _mm256_sub_ps (r03, r13_m); // ((r0 - r7) + (i3 + i4)) - s * (() ())
+    i7 = _mm256_sub_ps (i03, i13_m); // ((i0 + i7) + (r3 - r4)) - s * (() ())
 
     cplx_mul_conj_v (r1, i1, e[0], e[1]);
     cplx_mul_conj_v (r2, i2, e[2], e[3]);
     cplx_mul_conj_v (r3, i3, e[4], e[5]);
+    cplx_mul_conj_v (r4, i4, e[6], e[7]);
+    cplx_mul_conj_v (r5, i5, e[8], e[9]);
+    cplx_mul_conj_v (r6, i6, e[10], e[11]);
+    cplx_mul_conj_v (r7, i7, e[12], e[13]);
 
-    // transpose4 (r0, r1, r2, r3);
-    // transpose4 (i0, i1, i2, i3);
+    transpose8 (r0, r1, r2, r3, r4, r5, r6, r7);
+    transpose8 (i0, i1, i2, i3, i4, i5, i6, i7);
 
     if (! first)
     {
@@ -1250,58 +1300,56 @@ static inline void pffft_real_preprocess_4x4 (const __m256* in,
     *out++ = i2;
     *out++ = r3;
     *out++ = i3;
+    *out++ = r4;
+    *out++ = i4;
+    *out++ = r5;
+    *out++ = i5;
+    *out++ = r6;
+    *out++ = i6;
+    *out++ = r7;
+    *out++ = i7;
 }
 
 static void pffft_real_preprocess (int Ncvec, const __m256* in, __m256* out, const __m256* e)
 {
-    int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
+    int k, dk = Ncvec / (int) SIMD_SZ; // number of 8x8 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    __m256 Xr, Xi, *uout = (__m256*) out;
-    float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
-    static constexpr float s = M_SQRT2;
+    __m256 Xr {}, Xi {}, *uout = (__m256*) out;
+    static constexpr float s = M_SQRT2 / 2;
+    static constexpr auto s8 = 0.38268343236508977f;
+    static constexpr auto c8 = 0.9238795325112868f;
     assert (in != out);
-    for (k = 0; k < 4; ++k)
+    for (k = 0; k < 8; ++k)
     {
-        Xr[k] = ((float*) in)[8 * k];
-        Xi[k] = ((float*) in)[8 * k + 4];
+        Xr[k] = ((float*) in)[16 * k];
+        Xi[k] = ((float*) in)[16 * k + 8];
     }
 
-    pffft_real_preprocess_4x4 (in, e, out + 1, 1); // will write only 6 values
+    pffft_real_preprocess_8x8 (in, e, out + 1, 1); // will write only 6 values
 
-    /*
-      [Xr0 Xr1 Xr2 Xr3 Xi0 Xi1 Xi2 Xi3]
-
-      [cr0] [1   0   2   0   1   0   0   0]
-      [cr1] [1   0   0   0  -1   0  -2   0]
-      [cr2] [1   0  -2   0   1   0   0   0]
-      [cr3] [1   0   0   0  -1   0   2   0]
-      [ci0] [0   2   0   2   0   0   0   0]
-      [ci1] [0   s   0  -s   0  -s   0  -s]
-      [ci2] [0   0   0   0   0  -2   0   2]
-      [ci3] [0  -s   0   s   0  -s   0  -s]
-    */
     for (k = 1; k < dk; ++k)
     {
-        pffft_real_preprocess_4x4 (in + 8 * k, e + k * 6, out - 1 + k * 8, 0);
+        pffft_real_preprocess_8x8 (in + 16 * k, e + k * 14, out - 1 + k * 16, 0);
     }
 
-    cr0 = (Xr[0] + Xi[0]) + 2 * Xr[2];
-    uout[0][0] = cr0;
-    cr1 = (Xr[0] - Xi[0]) - 2 * Xi[2];
-    uout[0][1] = cr1;
-    cr2 = (Xr[0] + Xi[0]) - 2 * Xr[2];
-    uout[0][2] = cr2;
-    cr3 = (Xr[0] - Xi[0]) + 2 * Xi[2];
-    uout[0][3] = cr3;
-    ci0 = 2 * (Xr[1] + Xr[3]);
-    uout[2 * Ncvec - 1][0] = ci0;
-    ci1 = s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][1] = ci1;
-    ci2 = 2 * (Xi[3] - Xi[1]);
-    uout[2 * Ncvec - 1][2] = ci2;
-    ci3 = -s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][3] = ci3;
+    uout[0][0] = (Xr[0] + Xi[0]) + 2 * (Xr[2] + Xr[4] + Xr[6]);
+    uout[0][1] = (Xr[0] - Xi[0]) - 2 * Xi[4] + 2 * s * (Xr[2] - Xi[2] - Xr[6] - Xi[6]);
+    uout[0][2] = (Xr[0] + Xi[0]) - 2 * (Xr[4] + Xi[2] - Xi[6]);
+    uout[0][3] = (Xr[0] - Xi[0]) + 2 * Xi[4] + 2 * s * (-Xi[2] - Xr[2] + Xr[6] - Xi[6]);
+    uout[0][4] = (Xr[0] + Xi[0]) + 2 * (Xr[4] - Xr[2] - Xr[6]);
+    uout[0][5] = (Xr[0] - Xi[0]) - 2 * Xi[4] + 2 * s * (Xi[2] - Xr[2] + Xr[6] + Xi[6]);
+    uout[0][6] = (Xr[0] + Xi[0]) - 2 * (Xr[4] - Xi[2] + Xi[6]);
+    uout[0][7] = (Xr[0] - Xi[0]) + 2 * Xi[4] + 2 * s * (Xr[2] + Xi[2] - Xr[6] + Xi[6]);
+
+    uout[2 * Ncvec - 1][0] = 2 * (Xr[1] + Xr[3] + Xr[5] + Xr[7]);
+    uout[2 * Ncvec - 1][1] = 2 * c8 * (Xr[1] - Xi[3] - Xi[5] - Xr[7]) + 2 * s8 * (-Xi[1] + Xr[3] - Xr[5] - Xi[7]);
+    uout[2 * Ncvec - 1][2] = 2 * s * ((Xr[1] - Xi[1]) - (Xr[3] + Xi[3]) + (Xi[5] - Xr[5]) + (Xr[7] + Xi[7]));
+    uout[2 * Ncvec - 1][3] = 2 * s8 * (Xr[1] + Xi[3] + Xi[5] - Xr[7]) + 2 * c8 * (-Xi[1] - Xr[3] + Xr[5] - Xi[7]);
+    uout[2 * Ncvec - 1][4] = 2 * (Xi[3] - Xi[1] - Xi[5] + Xi[7]);
+    uout[2 * Ncvec - 1][5] = 2 * s8 * (-Xr[1] + Xi[3] + Xi[5] + Xr[7]) + 2 * c8 * (-Xi[1] + Xr[3] - Xr[5] - Xi[7]);
+    uout[2 * Ncvec - 1][6] = 2 * s * ((-Xr[1] - Xi[1]) + (Xr[3] - Xi[3]) + (Xr[5] + Xi[5]) - (Xr[7] - Xi[7]));
+    uout[2 * Ncvec - 1][7] = 2 * c8 * (-Xr[1] - Xi[3] - Xi[5] + Xr[7]) + 2 * s8 * (-Xi[1] - Xr[3] + Xr[5] - Xi[7]);
 }
 
 //====================================================================
@@ -1685,6 +1733,10 @@ static void reversed_copy (int N, const __m256* in, int in_stride, __m256* out)
 
 static void unreversed_copy (int N, const __m256* in, __m256* out, int out_stride)
 {
+    const __m256i mask_order = _mm256_setr_epi32 (0, 1, 4, 5, 2, 3, 6, 7);
+    const __m256i mask_order_r = _mm256_setr_epi32 (0, 6, 1, 7, 4, 2, 5, 3);
+    const __m256i mask_order_1r = _mm256_setr_epi32 (6, 4, 7, 5, 2, 0, 3, 1);
+
     __m256 g0, g1, h0, h1;
     int k;
     g0 = g1 = in[0];
@@ -1693,20 +1745,41 @@ static void unreversed_copy (int N, const __m256* in, __m256* out, int out_strid
     {
         h0 = *in++;
         h1 = *in++;
-        g1 = _mm256_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
-        h0 = _mm256_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
-        uninterleave2 (h0, g1, out[0], out[1]);
+
+        auto g1_zr = _mm256_permutevar8x32_ps (g1, mask_order);
+        auto h0_zr = _mm256_permutevar8x32_ps (h0, mask_order);
+
+        auto h0_r = _mm256_permute2f128_ps (g1_zr, h0_zr, 1 | (3 << 4));
+        g1_zr = _mm256_shuffle_ps (h1, g1_zr, _MM_SHUFFLE (3, 2, 1, 0));
+        auto g1_r = _mm256_permute2f128_ps (g1_zr, h0_zr, 0 | (2 << 4));
+
+        g1_r = _mm256_permutevar8x32_ps (g1_r, mask_order_r);
+        h0_r = _mm256_permutevar8x32_ps (h0_r, mask_order_1r);
+
+        out[0] = _mm256_unpacklo_ps (g1_r, h0_r);
+        out[1] = _mm256_unpackhi_ps (g1_r, h0_r);
+
         out += out_stride;
         g1 = h1;
     }
     h0 = *in++;
     h1 = g0;
-    g1 = _mm256_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
-    h0 = _mm256_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
-    uninterleave2 (h0, g1, out[0], out[1]);
+
+    auto g1_zr = _mm256_permutevar8x32_ps (g1, mask_order);
+    auto h0_zr = _mm256_permutevar8x32_ps (h0, mask_order);
+
+    auto h0_r = _mm256_permute2f128_ps (g1_zr, h0_zr, 1 | (3 << 4));
+    g1_zr = _mm256_shuffle_ps (h1, g1_zr, _MM_SHUFFLE (3, 2, 1, 0));
+    auto g1_r = _mm256_permute2f128_ps (g1_zr, h0_zr, 0 | (2 << 4));
+
+    g1_r = _mm256_permutevar8x32_ps (g1_r, mask_order_r);
+    h0_r = _mm256_permutevar8x32_ps (h0_r, mask_order_1r);
+
+    out[0] = _mm256_unpacklo_ps (g1_r, h0_r);
+    out[1] = _mm256_unpackhi_ps (g1_r, h0_r);
 }
 
-static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_direction_t direction)
+static void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_direction_t direction)
 {
     int k, N = setup->N, Ncvec = setup->Ncvec;
     auto* vin = (__m256*) in;
@@ -1734,11 +1807,16 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
         {
             for (k = 0; k < dk; ++k)
             {
-                uninterleave2 (vin[2 * (0 * dk + k) + 0], vin[2 * (0 * dk + k) + 1], vout[k * 8 + 0], vout[k * 8 + 1]);
-                uninterleave2 (vin[2 * (2 * dk + k) + 0], vin[2 * (2 * dk + k) + 1], vout[k * 8 + 4], vout[k * 8 + 5]);
+                uninterleave2 (vin[2 * (0 * dk + k) + 0], vin[2 * (0 * dk + k) + 1], vout[k * 16 + 0], vout[k * 16 + 1]);
+                uninterleave2 (vin[2 * (2 * dk + k) + 0], vin[2 * (2 * dk + k) + 1], vout[k * 16 + 4], vout[k * 16 + 5]);
+                uninterleave2 (vin[2 * (4 * dk + k) + 0], vin[2 * (4 * dk + k) + 1], vout[k * 16 + 8], vout[k * 16 + 9]);
+                uninterleave2 (vin[2 * (6 * dk + k) + 0], vin[2 * (6 * dk + k) + 1], vout[k * 16 + 12], vout[k * 16 + 13]);
             }
-            unreversed_copy (dk, (__m256*) (in + N / 4), (__m256*) (out + N - 6 * SIMD_SZ), -8);
-            unreversed_copy (dk, (__m256*) (in + 3 * N / 4), (__m256*) (out + N - 2 * SIMD_SZ), -8);
+
+            unreversed_copy (dk, (__m256*) (in + N / 8), (__m256*) (out + N - 14 * SIMD_SZ), -16);
+            unreversed_copy (dk, (__m256*) (in + 3 * N / 8), (__m256*) (out + N - 10 * SIMD_SZ), -16);
+            unreversed_copy (dk, (__m256*) (in + 5 * N / 8), (__m256*) (out + N - 6 * SIMD_SZ), -16);
+            unreversed_copy (dk, (__m256*) (in + 7 * N / 8), (__m256*) (out + N - 2 * SIMD_SZ), -16);
         }
     }
     else
