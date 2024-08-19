@@ -58,7 +58,7 @@ static FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
     }
     else
     {
-       common::cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
+        common::cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
     }
 
     /* check that N is decomposable with allowed prime factors */
@@ -98,19 +98,17 @@ static inline auto cplx_mul (float32x4_t ar, float32x4_t ai, float br, float bi)
 {
     auto tmp = vmulq_n_f32 (ar, bi);
     ar = vmulq_n_f32 (ar, br);
-    ar = vsubq_f32 (ar, vmulq_n_f32 (ai, bi));
-    ai = vmulq_n_f32 (ai, br);
-    ai = vaddq_f32 (ai, tmp);
+    ar = vfmsq_n_f32 (ar, ai, bi);
+    ai = vfmaq_n_f32 (tmp, ai, br);
     return std::make_tuple (ar, ai);
 }
 
 static inline auto cplx_mul_conj (float32x4_t ar, float32x4_t ai, float br, float bi)
 {
-    auto tmp = vmulq_n_f32 (ar, bi);
+    auto tmp = vmulq_n_f32 (ar, -bi);
     ar = vmulq_n_f32 (ar, br);
-    ar = vaddq_f32 (ar, vmulq_n_f32 (ai, bi));
-    ai = vmulq_n_f32 (ai, br);
-    ai = vsubq_f32 (ai, tmp);
+    ar = vfmaq_n_f32 (ar, ai, bi);
+    ai = vfmaq_n_f32 (tmp, ai, br);
     return std::make_tuple (ar, ai);
 }
 
@@ -118,19 +116,17 @@ static inline auto cplx_mul_v (float32x4_t ar, float32x4_t ai, float32x4_t br, f
 {
     auto tmp = vmulq_f32 (ar, bi);
     ar = vmulq_f32 (ar, br);
-    ar = vsubq_f32 (ar, vmulq_f32 (ai, bi));
-    ai = vmulq_f32 (ai, br);
-    ai = vaddq_f32 (ai, tmp);
+    ar = vfmsq_f32 (ar, ai, bi);
+    ai = vfmaq_f32 (tmp, ai, br);
     return std::make_tuple (ar, ai);
 }
 
 static inline auto cplx_mul_conj_v (float32x4_t ar, float32x4_t ai, float32x4_t br, float32x4_t bi)
 {
-    auto tmp = vmulq_f32 (ar, bi);
+    auto tmp = vmulq_f32 (ar, -bi);
     ar = vmulq_f32 (ar, br);
-    ar = vaddq_f32 (ar, vmulq_f32 (ai, bi));
-    ai = vmulq_f32 (ai, br);
-    ai = vsubq_f32 (ai, tmp);
+    ar = vfmaq_f32 (ar, ai, bi);
+    ai = vfmaq_f32 (tmp, ai, br);
     return std::make_tuple (ar, ai);
 }
 
@@ -195,10 +191,10 @@ static void passf3_ps (int ido, int l1, const float32x4_t* cc, float32x4_t* ch, 
         for (i = 0; i < ido - 1; i += 2)
         {
             tr2 = vaddq_f32 (cc[i + ido], cc[i + 2 * ido]);
-            cr2 = vaddq_f32 (cc[i], vmulq_n_f32 (tr2, taur));
+            cr2 = vfmaq_n_f32 (cc[i], tr2, taur);
             ch[i] = vaddq_f32 (cc[i], tr2);
             ti2 = vaddq_f32 (cc[i + ido + 1], cc[i + 2 * ido + 1]);
-            ci2 = vaddq_f32 (cc[i + 1], vmulq_n_f32 (ti2, taur));
+            ci2 = vfmaq_n_f32 (cc[i + 1], ti2, taur);
             ch[i + 1] = vaddq_f32 (cc[i + 1], ti2);
             cr3 = vmulq_n_f32 (vsubq_f32 (cc[i + ido], cc[i + 2 * ido]), taui);
             ci3 = vmulq_n_f32 (vsubq_f32 (cc[i + ido + 1], cc[i + 2 * ido + 1]), taui);
