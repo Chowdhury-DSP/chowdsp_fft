@@ -41,3 +41,10 @@ else()
         target_compile_definitions(chowdsp_fft PRIVATE CHOWDSP_FFT_COMPILER_SUPPORTS_AVX=0)
     endif()
 endif()
+
+## JUCE compatibility
+if(EXISTS "${JUCE_MODULES_DIR}")
+    message(STATUS "Configuring chowdsp_fft for JUCE")
+    juce_add_module(chowdsp_fft_juce ALIAS_NAMESPACE chowdsp)
+    target_link_libraries(chowdsp_fft_juce INTERFACE chowdsp_fft)
+endif()
