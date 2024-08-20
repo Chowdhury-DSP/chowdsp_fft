@@ -1842,6 +1842,12 @@ static void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_directi
 }
 
 //====================================================================
+static void* snap_pointer_to_alignment (void* base_pointer,
+                                 int alignment_bytes) noexcept
+{
+    return (void*) ((((size_t) base_pointer) + (alignment_bytes - 1)) & ~(alignment_bytes - 1));
+}
+
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch_ptr, fft_direction_t direction, int ordered)
 {
     auto* scratch = (__m256*) scratch_ptr;
@@ -1849,9 +1855,11 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
     int k, Ncvec = setup->Ncvec;
     int nf_odd = (setup->ifac[1] & 1);
 
-    // temporary buffer is allocated on the stack if the scratch pointer is NULL
+    // Temporary buffer is allocated on the stack if the scratch pointer is NULL.
+    // Depending on the platform, alloca may not return a pointer that is aligned to 32 bytes,
+    // which is required for AVX registers, so we over-allocate and manually align the pointer.
     int stack_allocate = (scratch == nullptr ? Ncvec * 2 : 1);
-    auto* scratch_on_stack = (__m256*) alloca (stack_allocate * sizeof (__m256));
+    auto* scratch_on_stack = (__m256*) snap_pointer_to_alignment (alloca ((stack_allocate + 1) * sizeof (__m256)), 32);
 
     const auto* vinput = (const __m256*) finput;
     auto* voutput = (__m256*) foutput;
