@@ -1,4 +1,4 @@
-#if defined (__SSE2__)
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 
 #include <immintrin.h>
 #include <cassert>
@@ -1129,56 +1129,61 @@ static void pffft_real_finalize (int Ncvec, const __m256* in, __m256* out, const
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 8x8 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    auto* uout = (__m256*) out;
+    union v4sf_union {
+        __m256  v;
+        float f[SIMD_SZ];
+    };
+
+    auto* uout = (v4sf_union*) out;
     __m256 save = in[15], zero = {};
     static constexpr float s = M_SQRT2 / 2;
     static constexpr auto s8 = 0.38268343236508977f;
     static constexpr auto c8 = 0.9238795325112868f;
 
-    const auto cr = in[0];
-    const auto ci = in[Ncvec * 2 - 1];
+    const v4sf_union cr { .v = in[0] };
+    const v4sf_union ci { .v = in[Ncvec * 2 - 1] };
     assert (in != out);
     pffft_real_finalize_8x8 (zero, zero, in + 1, e, out);
 
-    auto r04p = cr[0] + cr[4];
-    auto r04m = cr[0] - cr[4];
-    auto r17p = cr[7] + cr[1];
-    auto r17m = cr[7] - cr[1];
-    auto r26p = cr[6] + cr[2];
-    auto r26m = cr[6] - cr[2];
-    auto r35p = cr[5] + cr[3];
-    auto r35m = cr[5] - cr[3];
+    auto r04p = cr.f[0] + cr.f[4];
+    auto r04m = cr.f[0] - cr.f[4];
+    auto r17p = cr.f[7] + cr.f[1];
+    auto r17m = cr.f[7] - cr.f[1];
+    auto r26p = cr.f[6] + cr.f[2];
+    auto r26m = cr.f[6] - cr.f[2];
+    auto r35p = cr.f[5] + cr.f[3];
+    auto r35m = cr.f[5] - cr.f[3];
     auto s1735p = s * (r17m + r35m);
     auto s1735m = s * (r17p - r35p);
 
-    uout[0][0] = r04p + r17p + r26p + r35p;
-    uout[1][0] = r04p - r17p + r26p - r35p;
-    uout[4][0] = r04m + s1735m;
-    uout[5][0] = s1735p + r26m;
-    uout[8][0] = r04p - r26p;
-    uout[9][0] = r17m - r35m;
-    uout[12][0] = r04m - s1735m;
-    uout[13][0] = s1735p - r26m;
+    uout[0].f[0] = r04p + r17p + r26p + r35p;
+    uout[1].f[0] = r04p - r17p + r26p - r35p;
+    uout[4].f[0] = r04m + s1735m;
+    uout[5].f[0] = s1735p + r26m;
+    uout[8].f[0] = r04p - r26p;
+    uout[9].f[0] = r17m - r35m;
+    uout[12].f[0] = r04m - s1735m;
+    uout[13].f[0] = s1735p - r26m;
 
-    auto c17p = c8 * (ci[1] + ci[7]);
-    auto c17m = c8 * (ci[1] - ci[7]);
-    auto s17p = s8 * (ci[1] + ci[7]);
-    auto s17m = s8 * (ci[1] - ci[7]);
-    auto s26p = s * (ci[2] + ci[6]);
-    auto s26m = s * (ci[2] - ci[6]);
-    auto c35p = c8 * (ci[3] + ci[5]);
-    auto c35m = c8 * (ci[3] - ci[5]);
-    auto s35p = s8 * (ci[3] + ci[5]);
-    auto s35m = s8 * (ci[3] - ci[5]);
+    auto c17p = c8 * (ci.f[1] + ci.f[7]);
+    auto c17m = c8 * (ci.f[1] - ci.f[7]);
+    auto s17p = s8 * (ci.f[1] + ci.f[7]);
+    auto s17m = s8 * (ci.f[1] - ci.f[7]);
+    auto s26p = s * (ci.f[2] + ci.f[6]);
+    auto s26m = s * (ci.f[2] - ci.f[6]);
+    auto c35p = c8 * (ci.f[3] + ci.f[5]);
+    auto c35m = c8 * (ci.f[3] - ci.f[5]);
+    auto s35p = s8 * (ci.f[3] + ci.f[5]);
+    auto s35m = s8 * (ci.f[3] - ci.f[5]);
 
-    uout[2][0] = ci[0] + c17m + s26m + s35m;
-    uout[3][0] = -ci[4] - s17p - s26p - c35p;
-    uout[6][0] = ci[0] + s17m - s26m - c35m;
-    uout[7][0] = ci[4] - c17p - s26p + s35p;
-    uout[10][0] = ci[0] - s17m - s26m + c35m;
-    uout[11][0] = -ci[4] - c17p + s26p + s35p;
-    uout[14][0] = ci[0] - c17m + s26m - s35m;
-    uout[15][0] = ci[4] - s17p + s26p - c35p;
+    uout[2].f[0] = ci.f[0] + c17m + s26m + s35m;
+    uout[3].f[0] = -ci.f[4] - s17p - s26p - c35p;
+    uout[6].f[0] = ci.f[0] + s17m - s26m - c35m;
+    uout[7].f[0] = ci.f[4] - c17p - s26p + s35p;
+    uout[10].f[0] = ci.f[0] - s17m - s26m + c35m;
+    uout[11].f[0] = -ci.f[4] - c17p + s26p + s35p;
+    uout[14].f[0] = ci.f[0] - c17m + s26m - s35m;
+    uout[15].f[0] = ci.f[4] - s17p + s26p - c35p;
 
     for (k = 1; k < dk; ++k)
     {
@@ -1306,15 +1311,20 @@ static void pffft_real_preprocess (int Ncvec, const __m256* in, __m256* out, con
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 8x8 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    __m256 Xr {}, Xi {}, *uout = (__m256*) out;
+    union v4sf_union {
+        __m256  v;
+        float f[SIMD_SZ];
+    };
+
+    v4sf_union Xr {}, Xi {}, *uout = (v4sf_union*) out;
     static constexpr float s = M_SQRT2 / 2;
     static constexpr auto s8 = 0.38268343236508977f;
     static constexpr auto c8 = 0.9238795325112868f;
     assert (in != out);
     for (k = 0; k < 8; ++k)
     {
-        Xr[k] = ((float*) in)[16 * k];
-        Xi[k] = ((float*) in)[16 * k + 8];
+        Xr.f[k] = ((float*) in)[16 * k];
+        Xi.f[k] = ((float*) in)[16 * k + 8];
     }
 
     pffft_real_preprocess_8x8 (in, e, out + 1, 1); // will write only 6 values
@@ -1324,23 +1334,23 @@ static void pffft_real_preprocess (int Ncvec, const __m256* in, __m256* out, con
         pffft_real_preprocess_8x8 (in + 16 * k, e + k * 14, out - 1 + k * 16, 0);
     }
 
-    uout[0][0] = (Xr[0] + Xi[0]) + 2 * (Xr[2] + Xr[4] + Xr[6]);
-    uout[0][1] = (Xr[0] - Xi[0]) - 2 * Xi[4] + 2 * s * (Xr[2] - Xi[2] - Xr[6] - Xi[6]);
-    uout[0][2] = (Xr[0] + Xi[0]) - 2 * (Xr[4] + Xi[2] - Xi[6]);
-    uout[0][3] = (Xr[0] - Xi[0]) + 2 * Xi[4] + 2 * s * (-Xi[2] - Xr[2] + Xr[6] - Xi[6]);
-    uout[0][4] = (Xr[0] + Xi[0]) + 2 * (Xr[4] - Xr[2] - Xr[6]);
-    uout[0][5] = (Xr[0] - Xi[0]) - 2 * Xi[4] + 2 * s * (Xi[2] - Xr[2] + Xr[6] + Xi[6]);
-    uout[0][6] = (Xr[0] + Xi[0]) - 2 * (Xr[4] - Xi[2] + Xi[6]);
-    uout[0][7] = (Xr[0] - Xi[0]) + 2 * Xi[4] + 2 * s * (Xr[2] + Xi[2] - Xr[6] + Xi[6]);
+    uout[0].f[0] = (Xr.f[0] + Xi.f[0]) + 2 * (Xr.f[2] + Xr.f[4] + Xr.f[6]);
+    uout[0].f[1] = (Xr.f[0] - Xi.f[0]) - 2 * Xi.f[4] + 2 * s * (Xr.f[2] - Xi.f[2] - Xr.f[6] - Xi.f[6]);
+    uout[0].f[2] = (Xr.f[0] + Xi.f[0]) - 2 * (Xr.f[4] + Xi.f[2] - Xi.f[6]);
+    uout[0].f[3] = (Xr.f[0] - Xi.f[0]) + 2 * Xi.f[4] + 2 * s * (-Xi.f[2] - Xr.f[2] + Xr.f[6] - Xi.f[6]);
+    uout[0].f[4] = (Xr.f[0] + Xi.f[0]) + 2 * (Xr.f[4] - Xr.f[2] - Xr.f[6]);
+    uout[0].f[5] = (Xr.f[0] - Xi.f[0]) - 2 * Xi.f[4] + 2 * s * (Xi.f[2] - Xr.f[2] + Xr.f[6] + Xi.f[6]);
+    uout[0].f[6] = (Xr.f[0] + Xi.f[0]) - 2 * (Xr.f[4] - Xi.f[2] + Xi.f[6]);
+    uout[0].f[7] = (Xr.f[0] - Xi.f[0]) + 2 * Xi.f[4] + 2 * s * (Xr.f[2] + Xi.f[2] - Xr.f[6] + Xi.f[6]);
 
-    uout[2 * Ncvec - 1][0] = 2 * (Xr[1] + Xr[3] + Xr[5] + Xr[7]);
-    uout[2 * Ncvec - 1][1] = 2 * c8 * (Xr[1] - Xi[3] - Xi[5] - Xr[7]) + 2 * s8 * (-Xi[1] + Xr[3] - Xr[5] - Xi[7]);
-    uout[2 * Ncvec - 1][2] = 2 * s * ((Xr[1] - Xi[1]) - (Xr[3] + Xi[3]) + (Xi[5] - Xr[5]) + (Xr[7] + Xi[7]));
-    uout[2 * Ncvec - 1][3] = 2 * s8 * (Xr[1] + Xi[3] + Xi[5] - Xr[7]) + 2 * c8 * (-Xi[1] - Xr[3] + Xr[5] - Xi[7]);
-    uout[2 * Ncvec - 1][4] = 2 * (Xi[3] - Xi[1] - Xi[5] + Xi[7]);
-    uout[2 * Ncvec - 1][5] = 2 * s8 * (-Xr[1] + Xi[3] + Xi[5] + Xr[7]) + 2 * c8 * (-Xi[1] + Xr[3] - Xr[5] - Xi[7]);
-    uout[2 * Ncvec - 1][6] = 2 * s * ((-Xr[1] - Xi[1]) + (Xr[3] - Xi[3]) + (Xr[5] + Xi[5]) - (Xr[7] - Xi[7]));
-    uout[2 * Ncvec - 1][7] = 2 * c8 * (-Xr[1] - Xi[3] - Xi[5] + Xr[7]) + 2 * s8 * (-Xi[1] - Xr[3] + Xr[5] - Xi[7]);
+    uout[2 * Ncvec - 1].f[0] = 2 * (Xr.f[1] + Xr.f[3] + Xr.f[5] + Xr.f[7]);
+    uout[2 * Ncvec - 1].f[1] = 2 * c8 * (Xr.f[1] - Xi.f[3] - Xi.f[5] - Xr.f[7]) + 2 * s8 * (-Xi.f[1] + Xr.f[3] - Xr.f[5] - Xi.f[7]);
+    uout[2 * Ncvec - 1].f[2] = 2 * s * ((Xr.f[1] - Xi.f[1]) - (Xr.f[3] + Xi.f[3]) + (Xi.f[5] - Xr.f[5]) + (Xr.f[7] + Xi.f[7]));
+    uout[2 * Ncvec - 1].f[3] = 2 * s8 * (Xr.f[1] + Xi.f[3] + Xi.f[5] - Xr.f[7]) + 2 * c8 * (-Xi.f[1] - Xr.f[3] + Xr.f[5] - Xi.f[7]);
+    uout[2 * Ncvec - 1].f[4] = 2 * (Xi.f[3] - Xi.f[1] - Xi.f[5] + Xi.f[7]);
+    uout[2 * Ncvec - 1].f[5] = 2 * s8 * (-Xr.f[1] + Xi.f[3] + Xi.f[5] + Xr.f[7]) + 2 * c8 * (-Xi.f[1] + Xr.f[3] - Xr.f[5] - Xi.f[7]);
+    uout[2 * Ncvec - 1].f[6] = 2 * s * ((-Xr.f[1] - Xi.f[1]) + (Xr.f[3] - Xi.f[3]) + (Xr.f[5] + Xi.f[5]) - (Xr.f[7] - Xi.f[7]));
+    uout[2 * Ncvec - 1].f[7] = 2 * c8 * (-Xr.f[1] - Xi.f[3] - Xi.f[5] + Xr.f[7]) + 2 * s8 * (-Xi.f[1] - Xr.f[3] + Xr.f[5] - Xi.f[7]);
 }
 
 //====================================================================

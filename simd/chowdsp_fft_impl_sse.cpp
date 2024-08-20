@@ -913,13 +913,18 @@ static void pffft_real_finalize (int Ncvec, const __m128* in, __m128* out, const
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    __m128 cr, ci, *uout = (__m128*) out;
+    union v4sf_union {
+        __m128  v;
+        float f[SIMD_SZ];
+    };
+
+    v4sf_union cr, ci, *uout = (v4sf_union*) out;
     __m128 save = in[7], zero = {};
     float xr0, xi0, xr1, xi1, xr2, xi2, xr3, xi3;
     static constexpr float s = M_SQRT2 / 2;
 
-    cr = in[0];
-    ci = in[Ncvec * 2 - 1];
+    cr.v = in[0];
+    ci.v = in[Ncvec * 2 - 1];
     assert (in != out);
     pffft_real_finalize_4x4 (&zero, &zero, in + 1, e, out);
 
@@ -936,22 +941,22 @@ static void pffft_real_finalize (int Ncvec, const __m128* in, __m128* out, const
     [Xi(3N/4)] [0   0   0   0   0  -s   1  -s]
   */
 
-    xr0 = (cr[0] + cr[2]) + (cr[1] + cr[3]);
-    uout[0][0] = xr0;
-    xi0 = (cr[0] + cr[2]) - (cr[1] + cr[3]);
-    uout[1][0] = xi0;
-    xr2 = (cr[0] - cr[2]);
-    uout[4][0] = xr2;
-    xi2 = (cr[3] - cr[1]);
-    uout[5][0] = xi2;
-    xr1 = ci[0] + s * (ci[1] - ci[3]);
-    uout[2][0] = xr1;
-    xi1 = -ci[2] - s * (ci[1] + ci[3]);
-    uout[3][0] = xi1;
-    xr3 = ci[0] - s * (ci[1] - ci[3]);
-    uout[6][0] = xr3;
-    xi3 = ci[2] - s * (ci[1] + ci[3]);
-    uout[7][0] = xi3;
+    xr0 = (cr.f[0] + cr.f[2]) + (cr.f[1] + cr.f[3]);
+    uout[0].f[0] = xr0;
+    xi0 = (cr.f[0] + cr.f[2]) - (cr.f[1] + cr.f[3]);
+    uout[1].f[0] = xi0;
+    xr2 = (cr.f[0] - cr.f[2]);
+    uout[4].f[0] = xr2;
+    xi2 = (cr.f[3] - cr.f[1]);
+    uout[5].f[0] = xi2;
+    xr1 = ci.f[0] + s * (ci.f[1] - ci.f[3]);
+    uout[2].f[0] = xr1;
+    xi1 = -ci.f[2] - s * (ci.f[1] + ci.f[3]);
+    uout[3].f[0] = xi1;
+    xr3 = ci.f[0] - s * (ci.f[1] - ci.f[3]);
+    uout[6].f[0] = xr3;
+    xi3 = ci.f[2] - s * (ci.f[1] + ci.f[3]);
+    uout[7].f[0] = xi3;
 
     for (k = 1; k < dk; ++k)
     {
@@ -1020,14 +1025,19 @@ static void pffft_real_preprocess (int Ncvec, const __m128* in, __m128* out, con
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    __m128 Xr, Xi, *uout = (__m128*) out;
+    union v4sf_union {
+        __m128  v;
+        float f[SIMD_SZ];
+    };
+
+    v4sf_union Xr, Xi, *uout = (v4sf_union*) out;
     float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
     static constexpr float s = M_SQRT2;
     assert (in != out);
     for (k = 0; k < 4; ++k)
     {
-        Xr[k] = ((float*) in)[8 * k];
-        Xi[k] = ((float*) in)[8 * k + 4];
+        Xr.f[k] = ((float*) in)[8 * k];
+        Xi.f[k] = ((float*) in)[8 * k + 4];
     }
 
     pffft_real_preprocess_4x4 (in, e, out + 1, 1); // will write only 6 values
@@ -1049,22 +1059,22 @@ static void pffft_real_preprocess (int Ncvec, const __m128* in, __m128* out, con
         pffft_real_preprocess_4x4 (in + 8 * k, e + k * 6, out - 1 + k * 8, 0);
     }
 
-    cr0 = (Xr[0] + Xi[0]) + 2 * Xr[2];
-    uout[0][0] = cr0;
-    cr1 = (Xr[0] - Xi[0]) - 2 * Xi[2];
-    uout[0][1] = cr1;
-    cr2 = (Xr[0] + Xi[0]) - 2 * Xr[2];
-    uout[0][2] = cr2;
-    cr3 = (Xr[0] - Xi[0]) + 2 * Xi[2];
-    uout[0][3] = cr3;
-    ci0 = 2 * (Xr[1] + Xr[3]);
-    uout[2 * Ncvec - 1][0] = ci0;
-    ci1 = s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][1] = ci1;
-    ci2 = 2 * (Xi[3] - Xi[1]);
-    uout[2 * Ncvec - 1][2] = ci2;
-    ci3 = -s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][3] = ci3;
+    cr0 = (Xr.f[0] + Xi.f[0]) + 2 * Xr.f[2];
+    uout[0].f[0] = cr0;
+    cr1 = (Xr.f[0] - Xi.f[0]) - 2 * Xi.f[2];
+    uout[0].f[1] = cr1;
+    cr2 = (Xr.f[0] + Xi.f[0]) - 2 * Xr.f[2];
+    uout[0].f[2] = cr2;
+    cr3 = (Xr.f[0] - Xi.f[0]) + 2 * Xi.f[2];
+    uout[0].f[3] = cr3;
+    ci0 = 2 * (Xr.f[1] + Xr.f[3]);
+    uout[2 * Ncvec - 1].f[0] = ci0;
+    ci1 = s * (Xr.f[1] - Xr.f[3]) - s * (Xi.f[1] + Xi.f[3]);
+    uout[2 * Ncvec - 1].f[1] = ci1;
+    ci2 = 2 * (Xi.f[3] - Xi.f[1]);
+    uout[2 * Ncvec - 1].f[2] = ci2;
+    ci3 = -s * (Xr.f[1] - Xr.f[3]) - s * (Xi.f[1] + Xi.f[3]);
+    uout[2 * Ncvec - 1].f[3] = ci3;
 }
 
 //====================================================================

@@ -31,7 +31,7 @@ void aligned_free (void* p)
 
 #include "simd/chowdsp_fft_impl_common.hpp"
 
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #include "simd/chowdsp_fft_impl_sse.cpp"
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
 namespace chowdsp::fft::avx
@@ -50,7 +50,7 @@ static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
 
 namespace chowdsp::fft
 {
-#if defined(__SSE2__) && CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+#if (defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)) && CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
 // borrowed from XSIMD: https://github.com/xtensor-stack/xsimd/blob/master/include/xsimd/config/xsimd_cpuid.hpp#L124
 static bool cpu_supports_avx()
 {
@@ -179,7 +179,7 @@ bool check_is_pointer_sse_setup (void* ptr)
 
 void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use_avx_if_available)
 {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
     if (use_avx_if_available)
     {
@@ -203,7 +203,7 @@ void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use
 
 void fft_destroy_setup (void* ptr)
 {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
     if (check_is_pointer_sse_setup (ptr))
         sse::fft_destroy_setup (reinterpret_cast<sse::FFT_Setup*> (get_setup_pointer (ptr)));
@@ -219,7 +219,7 @@ void fft_destroy_setup (void* ptr)
 
 void fft_transform (void* setup, const float* input, float* output, float* work, fft_direction_t direction)
 {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
     if (check_is_pointer_sse_setup (setup))
     {
