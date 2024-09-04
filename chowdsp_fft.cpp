@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 
 #if defined(_MSC_VER)
 // Contains the definition of __cpuidex
