@@ -1,9 +1,16 @@
 #pragma once
 
+#ifdef __cplusplus
 #include <cstddef>
 
+extern "C"
+{
 namespace chowdsp::fft
 {
+#else
+#include <stddef.h>
+#endif
+
 /* direction of the transform */
 typedef enum
 {
@@ -23,7 +30,11 @@ typedef enum
   FFT_Setup structure is read-only so it can safely be shared by
   multiple concurrent threads.
 */
-void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available = true);
+void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available
+#ifdef __cplusplus
+                                                       = true
+#endif
+);
 void fft_destroy_setup (void*);
 
 /*
@@ -44,4 +55,8 @@ void fft_transform (void* setup, const float* input, float* output, float* work,
 
 void* aligned_malloc (size_t nb_bytes);
 void aligned_free (void*);
+
+#ifdef __cplusplus
+}
 } // namespace chowdsp::fft
+#endif
