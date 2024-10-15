@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include <chowdsp_fft.h>
 #include <pffft.h>
 

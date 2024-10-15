@@ -2,10 +2,19 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <vector>
+#include <utility>
 
 #include <chowdsp_fft.h>
 #include <pffft.h>
 #include <pffft.c>
+
+// @TODO:
+// These benchmark results are not very reliable at the moment.
+// In particular the timings for small FFT sizes are way too noisy
+// to get any meaningful info from. At the very least we should
+// take an average from a bunch of runs. Maybe it's worth it
+// to use a fully-fledged benchmarking framework like google/benchmark?
 
 std::pair<float, float> bench_complex (int N)
 {
@@ -46,6 +55,9 @@ std::pair<float, float> bench_complex (int N)
     duration = std::chrono::high_resolution_clock::now() - start;
     auto ref_duration_seconds = std::chrono::duration<float> (duration).count();
     std::cout << "    pffft: " << ref_duration_seconds << " seconds" << std::endl;
+
+    const auto speed_factor = ref_duration_seconds / test_duration_seconds;
+    std::cout << "    speed: " << speed_factor << "x" << std::endl;
 
     chowdsp::fft::fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
@@ -95,6 +107,9 @@ std::pair<float, float> bench_real (int N)
     duration = std::chrono::high_resolution_clock::now() - start;
     auto ref_duration_seconds = std::chrono::duration<float> (duration).count();
     std::cout << "    pffft: " << ref_duration_seconds << " seconds" << std::endl;
+
+    const auto speed_factor = ref_duration_seconds / test_duration_seconds;
+    std::cout << "    speed: " << speed_factor << "x" << std::endl;
 
     chowdsp::fft::fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
