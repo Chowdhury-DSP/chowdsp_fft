@@ -1,5 +1,8 @@
 # chowdsp_fft
 
+[![Test](https://github.com/Chowdhury-DSP/chowdsp_fft/actions/workflows/test.yml/badge.svg)](https://github.com/Chowdhury-DSP/chowdsp_fft/actions/workflows/test.yml)
+[![Bench](https://github.com/Chowdhury-DSP/chowdsp_fft/actions/workflows/bench.yml/badge.svg)](https://github.com/Chowdhury-DSP/chowdsp_fft/actions/workflows/bench.yml)
+
 `chowdsp_fft` is a fork of the [`pffft`](https://bitbucket.org/jpommier/pffft/src/master/)
 library for computing Fast Fourier Transforms. This fork adds a couple
 of optimizations, most importantly the ability to use AVX intrinsics
