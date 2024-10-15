@@ -21,7 +21,7 @@ jobs:
         include:
           - name: Linux
             os: ubuntu-22.04
-            cmake_args: "-DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 -DCHOWDSP_FFT_COVERAGE=ON"
+            cmake_args: "-DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15"
             nparallel: 4
           - name: Windows
             os: windows-2022
@@ -64,9 +64,6 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          submodules: recursive
-          token: ${{ secrets.OUR_GITHUB_PAT }}
 
       - name: Cmake Configure
         run: cmake -Bbuild -G"Ninja Multi-Config" -DCHOWDSP_FFT_TESTING=ON ${{ matrix.cmake_args }}
@@ -88,22 +85,3 @@ jobs:
 
       - name: Run Test C++ (Release)
         run: ./build/test/Release/test_chowdsp_fft_cpp
-
-      - name: Collect Coverage Data
-        if: runner.os == 'Linux'
-        run: |
-          lcov --directory . --capture --output-file coverage.info
-          lcov --remove coverage.info '/usr/*' "${HOME}"'/.cache/*' '/Applications/Xcode*' '*build*' '*test*' --output-file coverage.info
-
-      - name: Report Coverage Data
-        if: runner.os == 'Linux'
-        run: lcov --list coverage.info
-
-      - name: Upload coverage to Codecov
-        if: runner.os == 'Linux'
-        uses: codecov/codecov-action@v4
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.info
-          verbose: true

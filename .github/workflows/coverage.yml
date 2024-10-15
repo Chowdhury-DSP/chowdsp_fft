@@ -1,0 +1,61 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - ci
+
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    name: Test library with coverage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install Linux Deps
+        run: |
+          sudo apt-get update
+          sudo apt install libasound2-dev libcurl4-openssl-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.0-dev libglu1-mesa-dev libjack-jackd2-dev
+          sudo apt-add-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main"
+          sudo apt install clang-15 -y
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Get latest CMake
+        uses: lukka/get-cmake@latest
+
+      - uses: rui314/setup-mold@v1
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Cmake Configure
+        run: cmake -Bbuild -G"Ninja Multi-Config" -DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 -DCHOWDSP_FFT_TESTING=ON -DCHOWDSP_FFT_COVERAGE=ON
+
+      - name: Build Test
+        run: cmake --build build --config Debug --parallel --target test_chowdsp_fft_cpp
+
+      - name: Run Test
+        run: ./build/test/Debug/test_chowdsp_fft_cpp
+
+      - name: Collect Coverage Data
+        run: |
+          lcov --directory . --capture --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' "${HOME}"'/.cache/*' '/Applications/Xcode*' '*build*' '*test*' --output-file coverage.info
+
+      - name: Report Coverage Data
+        run: lcov --list coverage.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.info
+          verbose: true

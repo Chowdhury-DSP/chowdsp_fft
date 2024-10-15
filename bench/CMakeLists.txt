@@ -1,4 +1,4 @@
-message(STATUS "chowdsp_fft -- Configuring benchmarks ${CMAKE_BINARY_DIR}/_deps/pffft-src")
+message(STATUS "chowdsp_fft -- Configuring benchmarks")
 
 add_executable(bench_chowdsp_fft bench.cpp)
 target_link_libraries(bench_chowdsp_fft PRIVATE chowdsp_fft)
