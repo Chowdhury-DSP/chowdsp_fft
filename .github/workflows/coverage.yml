@@ -70,7 +70,7 @@ jobs:
 
       - name: Collect Coverage Data
         run: |
-          lcov --directory . --capture --output-file coverage.info
+          lcov --directory . --ignore-errors gcov --capture --output-file coverage.info
           lcov --remove coverage.info '/usr/*' "${HOME}"'/.cache/*' '/Applications/Xcode*' '*build*' '*test*' --output-file coverage.info
 
       - name: Report Coverage Data

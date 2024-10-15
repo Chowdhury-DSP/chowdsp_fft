@@ -14,7 +14,7 @@ if(CHOWDSP_FFT_COVERAGE)
     message(STATUS "chowdsp_fft -- Appending code coverage compiler flags: -g --coverage")
     target_compile_options(chowdsp_fft_avx PUBLIC -g --coverage)
     target_compile_options(chowdsp_fft PUBLIC -g --coverage)
-    target_compile_options(test_chowdsp_fft_cpp PUBLIC -O0 -g --coverage)
+    target_compile_options(test_chowdsp_fft_cpp PUBLIC -g --coverage)
     target_link_options(test_chowdsp_fft_cpp PUBLIC --coverage)
 endif()
 
