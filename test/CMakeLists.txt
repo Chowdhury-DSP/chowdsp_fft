@@ -3,7 +3,7 @@ message(STATUS "chowdsp_fft -- Configuring tests")
 include(CPM.cmake)
 CPMAddPackage("gh:catchorg/Catch2@3.2.1")
 include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
-CPMAddPackage("bb:jpommier/pffft#master")
+CPMAddPackage("bb:jpommier/pffft#fbc4058602803f40dc554b8a5d2bcc694c005f2f")
 
 add_executable(test_chowsdp_fft_cpp test.cpp ${pffft_SOURCE_DIR}/pffft.c)
 target_link_libraries(test_chowsdp_fft_cpp PRIVATE chowdsp_fft Catch2::Catch2WithMain)
