@@ -10,6 +10,14 @@ target_link_libraries(test_chowdsp_fft_cpp PRIVATE chowdsp_fft Catch2::Catch2Wit
 target_include_directories(test_chowdsp_fft_cpp PRIVATE ${pffft_SOURCE_DIR})
 target_compile_definitions(test_chowdsp_fft_cpp PRIVATE _USE_MATH_DEFINES=1)
 
+if(CHOWDSP_FFT_COVERAGE)
+    message(STATUS "chowdsp_fft -- Appending code coverage compiler flags: -g --coverage")
+    target_compile_options(chowdsp_fft_avx PUBLIC -g --coverage)
+    target_compile_options(chowdsp_fft PUBLIC -g --coverage)
+    target_compile_options(test_chowdsp_fft_cpp PUBLIC -O0 -g --coverage)
+    target_link_options(test_chowdsp_fft_cpp PUBLIC --coverage)
+endif()
+
 add_executable(test_chowdsp_fft_c test.c ${pffft_SOURCE_DIR}/pffft.c)
 target_link_libraries(test_chowdsp_fft_c PRIVATE chowdsp_fft)
 target_include_directories(test_chowdsp_fft_c PRIVATE ${pffft_SOURCE_DIR})

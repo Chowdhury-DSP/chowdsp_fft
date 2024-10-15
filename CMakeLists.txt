@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(chowdsp_fft)
-
 set(CMAKE_CXX_STANDARD 20)
-#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 add_library(chowdsp_fft STATIC)
 target_sources(chowdsp_fft
