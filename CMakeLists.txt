@@ -46,4 +46,5 @@ endif()
 
 if(CHOWDSP_FFT_TESTING)
     add_subdirectory(test)
+    add_subdirectory(bench)
 endif()
