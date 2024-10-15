@@ -7,7 +7,7 @@
 void compare (const float* ref, const float* test, int N)
 {
     const auto tol = 1.0e-6f * (float) N / 8.0f;
-    for (size_t n = 0; n < N; ++n)
+    for (int n = 0; n < N; ++n)
         REQUIRE (test[n] == Catch::Approx { ref[n] }.margin(tol));
 }
 
@@ -38,7 +38,7 @@ void test_complex (int N, bool use_avx = false)
     pffft_transform_ordered (pffft_setup, data_ref, data_ref, work_data_ref, PFFFT_BACKWARD);
 
     const auto norm_gain = 1.0f / static_cast<float> (N);
-    for (size_t n = 0; n < N * 2; ++n)
+    for (int n = 0; n < N * 2; ++n)
     {
         data[n] *= norm_gain;
         data_ref[n] *= norm_gain;
@@ -98,7 +98,7 @@ void test_real (int N, bool use_avx = false)
 
 TEST_CASE("FFT SSE/NEON")
 {
-    for (size_t i = 5; i < 20; ++i)
+    for (int i = 5; i < 20; ++i)
     {
         const auto fft_size = 1 << i;
         SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
@@ -116,7 +116,7 @@ TEST_CASE("FFT SSE/NEON")
 #if defined(__SSE2__)
 TEST_CASE("FFT AVX")
 {
-    for (size_t i = 5; i < 20; ++i)
+    for (int i = 5; i < 20; ++i)
     {
         const auto fft_size = 1 << i;
         SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
