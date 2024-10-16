@@ -1,0 +1,87 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - ci
+
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    name: Test library on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # show all errors for each platform (vs. cancel jobs on error)
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-22.04
+            cmake_args: "-DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15"
+            nparallel: 4
+          - name: Windows
+            os: windows-2022
+            cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
+            nparallel: 4
+          - name: MacOS
+            os: macos-14
+            cmake_args: "-D\"CMAKE_OSX_ARCHITECTURES=arm64;x86_64\""
+            nparallel: 4
+
+    steps:
+      - name: Install Linux Deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt install libasound2-dev libcurl4-openssl-dev libx11-dev libxinerama-dev libxext-dev libfreetype6-dev libwebkit2gtk-4.0-dev libglu1-mesa-dev libjack-jackd2-dev
+          sudo apt-add-repository "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main"
+          sudo apt install clang-15 -y
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Get latest CMake
+        uses: lukka/get-cmake@latest
+
+      - uses: rui314/setup-mold@v1
+        if: runner.os == 'Linux'
+
+      - name: Upgrade LLVM
+        if: runner.os == 'Windows'
+        run: choco upgrade llvm --version=18.1.8 --allow-downgrade
+
+      - name: Add msbuild to PATH
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup MSVC devcmd
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Cmake Configure
+        run: cmake -Bbuild -G"Ninja Multi-Config" -DCHOWDSP_FFT_TESTING=ON ${{ matrix.cmake_args }}
+
+      - name: Build Test C++ (Debug)
+        run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
+
+      - name: Run Test C++ (Debug)
+        run: ./build/test/Debug/test_chowdsp_fft_cpp
+
+      - name: Build Test C (Debug)
+        run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_c
+
+      - name: Run Test C (Debug)
+        run: ./build/test/Debug/test_chowdsp_fft_c
+
+      - name: Build Test C++ (Release)
+        run: cmake --build build --config Release --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
+
+      - name: Run Test C++ (Release)
+        run: ./build/test/Release/test_chowdsp_fft_cpp

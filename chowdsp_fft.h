@@ -57,6 +57,7 @@ namespace chowdsp::fft
 {
 #else
 #include <stddef.h>
+#include <stdbool.h>
 #endif
 
 /* direction of the transform */
