@@ -9,6 +9,7 @@ add_executable(test_chowdsp_fft_cpp test.cpp ${pffft_SOURCE_DIR}/pffft.c)
 target_link_libraries(test_chowdsp_fft_cpp PRIVATE chowdsp_fft Catch2::Catch2WithMain)
 target_include_directories(test_chowdsp_fft_cpp PRIVATE ${pffft_SOURCE_DIR})
 target_compile_definitions(test_chowdsp_fft_cpp PRIVATE _USE_MATH_DEFINES=1)
+target_compile_features(test_chowdsp_fft_cpp PRIVATE cxx_std_20)
 
 if(CHOWDSP_FFT_COVERAGE)
     message(STATUS "chowdsp_fft -- Appending code coverage compiler flags: -g --coverage")
