@@ -1645,4 +1645,9 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
     }
     assert (buff[ib] == voutput);
 }
+
+void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling)
+{
+    // TODO!
+}
 } // namespace chowdsp::fft::sse

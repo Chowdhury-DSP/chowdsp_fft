@@ -50,8 +50,8 @@ SOFTWARE.
 
 #include <cassert>
 #include <cmath>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 
 #if defined(_MSC_VER)
 // Contains the definition of __cpuidex
@@ -89,7 +89,7 @@ struct FFT_Setup;
 FFT_Setup* fft_new_setup (int N, fft_transform_t transform);
 void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
-}
+} // namespace chowdsp::fft::avx
 static constexpr uintptr_t address_mask = ~static_cast<uintptr_t> (3);
 static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
 #endif
@@ -187,7 +187,7 @@ static bool cpu_supports_avx()
     [[maybe_unused]] const auto fma3_avx = avx && fma3_sse42;
 
     int regs8[4];
-    get_cpuid(regs8, 0x80000001);
+    get_cpuid (regs8, 0x80000001);
     [[maybe_unused]] const auto fma4 = regs8[2] >> 16 & avx_state_os_enabled;
 
     // sse4a = regs[2] >> 6 & 1;
@@ -195,11 +195,11 @@ static bool cpu_supports_avx()
     // xop = regs[2] >> 11 & 1;
 
     int regs7[4];
-    get_cpuid(regs7, 0x7);
+    get_cpuid (regs7, 0x7);
     const auto avx2 = regs7[1] >> 5 & avx_state_os_enabled;
 
     int regs7a[4];
-    get_cpuid(regs7a, 0x7, 0x1);
+    get_cpuid (regs7a, 0x7, 0x1);
     [[maybe_unused]] const auto avxvnni = regs7a[0] >> 4 & avx_state_os_enabled;
 
     const auto fma3_avx2 = avx2 && fma3_sse42;
@@ -303,6 +303,82 @@ void fft_transform (void* setup, const float* input, float* output, float* work,
                                     (float32x4_t*) work,
                                     direction,
                                     1);
+#endif
+}
+
+void fft_transform_unordered (void* setup, const float* input, float* output, float* work, fft_direction_t direction)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (check_is_pointer_sse_setup (setup))
+    {
+        sse::pffft_transform_internal (reinterpret_cast<sse::FFT_Setup*> (get_setup_pointer (setup)),
+                                       input,
+                                       output,
+                                       (__m128*) work,
+                                       direction,
+                                       0);
+    }
+    else
+    {
+        avx::pffft_transform_internal (reinterpret_cast<avx::FFT_Setup*> (get_setup_pointer (setup)),
+                                       input,
+                                       output,
+                                       work,
+                                       direction,
+                                       0);
+    }
+#else
+    sse::pffft_transform_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
+                                   input,
+                                   output,
+                                   (__m128*) work,
+                                   direction,
+                                   0);
+#endif
+#elif defined(__ARM_NEON__)
+    neon::pffft_transform_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
+                                    input,
+                                    output,
+                                    (float32x4_t*) work,
+                                    direction,
+                                    0);
+#endif
+}
+
+void fft_convolve (void* setup, const float* a, const float* b, float* ab, float scaling)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (check_is_pointer_sse_setup (setup))
+    {
+        sse::pffft_convolve_internal (reinterpret_cast<sse::FFT_Setup*> (get_setup_pointer (setup)),
+                                      a,
+                                      b,
+                                      ab,
+                                      scaling);
+    }
+    else
+    {
+        avx::pffft_convolve_internal (reinterpret_cast<avx::FFT_Setup*> (get_setup_pointer (setup)),
+                                      a,
+                                      b,
+                                      ab,
+                                      scaling);
+    }
+#else
+    sse::pffft_convolve_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
+                                  a,
+                                  b,
+                                  ab,
+                                  scaling);
+#endif
+#elif defined(__ARM_NEON__)
+    neon::pffft_convolve_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
+                                   a,
+                                   b,
+                                   ab,
+                                   scaling);
 #endif
 }
 } // namespace chowdsp::fft

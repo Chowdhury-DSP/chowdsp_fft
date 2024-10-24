@@ -1558,9 +1558,6 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
     float32x4_t* buff[2] = { voutput, scratch ? scratch : scratch_on_stack };
     int ib = (nf_odd ^ ordered ? 1 : 0);
 
-    // assert (VALIGNED (finput) && VALIGNED (foutput));
-
-    //assert(finput != foutput);
     if (direction == FFT_FORWARD)
     {
         ib = ! ib;
@@ -1627,5 +1624,49 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
         ib = ! ib;
     }
     assert (buff[ib] == voutput);
+}
+
+void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling)
+{
+    int Ncvec = setup->Ncvec;
+    auto* va = (const float32x4_t*) a;
+    auto* vb = (const float32x4_t*) b;
+    auto* vab = (float32x4_t*) ab;
+
+    float ar0, ai0, br0, bi0, abr0, abi0;
+    const auto vscal = vld1q_dup_f32 (&scaling);
+    int i;
+
+    ar0 = reinterpret_cast<const float*> (&va[0])[0];
+    ai0 = reinterpret_cast<const float*> (&va[1])[0];
+    br0 = reinterpret_cast<const float*> (&vb[0])[0];
+    bi0 = reinterpret_cast<const float*> (&vb[1])[0];
+    abr0 = reinterpret_cast<const float*> (&vab[0])[0];
+    abi0 = reinterpret_cast<const float*> (&vab[1])[0];
+
+    for (i = 0; i < Ncvec; i += 2)
+    {
+        float32x4_t ar, ai, br, bi;
+        ar = va[2 * i + 0];
+        ai = va[2 * i + 1];
+        br = vb[2 * i + 0];
+        bi = vb[2 * i + 1];
+        std::tie (ar, ai) = cplx_mul_v (ar, ai, br, bi);
+        vab[2 * i + 0] = vmlaq_f32 (vab[2 * i + 0], ar, vscal);
+        vab[2 * i + 1] = vmlaq_f32 (vab[2 * i + 1], ai, vscal);
+        ar = va[2 * i + 2];
+        ai = va[2 * i + 3];
+        br = vb[2 * i + 2];
+        bi = vb[2 * i + 3];
+        std::tie (ar, ai) = cplx_mul_v (ar, ai, br, bi);
+        vab[2 * i + 2] = vmlaq_f32 (vab[2 * i + 2], ar, vscal);
+        vab[2 * i + 3] = vmlaq_f32 (vab[2 * i + 3], ai, vscal);
+    }
+
+    if (setup->transform == FFT_REAL)
+    {
+        reinterpret_cast<float*> (&vab[0])[0] = abr0 + ar0 * br0 * scaling;
+        reinterpret_cast<float*> (&vab[1])[0] = abi0 + ai0 * bi0 * scaling;
+    }
 }
 } // namespace chowdsp::fft::neon
