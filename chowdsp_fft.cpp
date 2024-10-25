@@ -89,6 +89,7 @@ struct FFT_Setup;
 FFT_Setup* fft_new_setup (int N, fft_transform_t transform);
 void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
+void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling);
 } // namespace chowdsp::fft::avx
 static constexpr uintptr_t address_mask = ~static_cast<uintptr_t> (3);
 static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);

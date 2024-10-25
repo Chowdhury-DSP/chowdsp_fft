@@ -8,7 +8,7 @@
 
 void compare (const float* ref, const float* test, int N)
 {
-    const auto tol = 1.0e-6f * (float) N / 8.0f;
+    const auto tol = 2.0e-7f * (float) N;
     for (int n = 0; n < N; ++n)
         REQUIRE (test[n] == Catch::Approx { ref[n] }.margin(tol));
 }
@@ -239,6 +239,16 @@ TEST_CASE("FFT AVX")
         SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
         {
             test_fft_real (fft_size, true);
+        }
+
+        SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))
+        {
+            test_convolution_complex (fft_size, true);
+        }
+
+        SECTION ("Testing Real Convolution with size: " + std::to_string (fft_size))
+        {
+            test_convolution_real (fft_size, true);
         }
     }
 }

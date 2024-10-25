@@ -1648,6 +1648,45 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
 
 void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling)
 {
-    // TODO!
+    int Ncvec = setup->Ncvec;
+    auto* va = reinterpret_cast<const __m128*> (a);
+    auto* vb = reinterpret_cast<const __m128*> (b);
+    auto* vab = reinterpret_cast<__m128*> (ab);
+
+    float ar0, ai0, br0, bi0, abr0, abi0;
+    const auto vscal = _mm_set1_ps (scaling);
+    int i;
+
+    ar0 = reinterpret_cast<const float*> (&va[0])[0];
+    ai0 = reinterpret_cast<const float*> (&va[1])[0];
+    br0 = reinterpret_cast<const float*> (&vb[0])[0];
+    bi0 = reinterpret_cast<const float*> (&vb[1])[0];
+    abr0 = reinterpret_cast<const float*> (&vab[0])[0];
+    abi0 = reinterpret_cast<const float*> (&vab[1])[0];
+
+    for (i = 0; i < Ncvec; i += 2)
+    {
+        __m128 ar, ai, br, bi;
+        ar = va[2 * i + 0];
+        ai = va[2 * i + 1];
+        br = vb[2 * i + 0];
+        bi = vb[2 * i + 1];
+        std::tie (ar, ai) = cplx_mul_v (ar, ai, br, bi);
+        vab[2 * i + 0] = _mm_add_ps  (vab[2 * i + 0], _mm_mul_ps (ar, vscal));
+        vab[2 * i + 1] = _mm_add_ps  (vab[2 * i + 1], _mm_mul_ps (ai, vscal));
+        ar = va[2 * i + 2];
+        ai = va[2 * i + 3];
+        br = vb[2 * i + 2];
+        bi = vb[2 * i + 3];
+        std::tie (ar, ai) = cplx_mul_v (ar, ai, br, bi);
+        vab[2 * i + 2] = _mm_add_ps (vab[2 * i + 2], _mm_mul_ps (ar, vscal));
+        vab[2 * i + 3] = _mm_add_ps (vab[2 * i + 3], _mm_mul_ps (ai, vscal));
+    }
+
+    if (setup->transform == FFT_REAL)
+    {
+        reinterpret_cast<float*> (&vab[0])[0] = abr0 + ar0 * br0 * scaling;
+        reinterpret_cast<float*> (&vab[1])[0] = abi0 + ai0 * bi0 * scaling;
+    }
 }
 } // namespace chowdsp::fft::sse
