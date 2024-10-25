@@ -98,7 +98,58 @@ void test_fft_real (int N, bool use_avx = false)
     pffft_aligned_free (work_data_ref);
 }
 
-void test_convolution (int N, bool use_avx = false)
+void test_convolution_complex (int N, bool use_avx = false)
+{
+    auto* sine1 = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* sine1_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
+    auto* sine2 = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* sine2_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
+    auto* out = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* out_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
+    auto* work_data = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* work_data_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
+
+    for (int i = 0; i < N; ++i)
+    {
+        sine1[i * 2] = std::sin (3.14f * (100.0f / 48000.0f) * (float) i);
+        sine1[i * 2 + 1] = std::cos (3.14f * (100.0f / 48000.0f) * (float) i);
+        sine2[i * 2] = std::sin (3.14f * (200.0f / 48000.0f) * (float) i);
+        sine2[i * 2 + 1] = std::cos (3.14f * (200.0f / 48000.0f) * (float) i);
+    }
+    std::copy (sine1, sine1 + N * 2, sine1_ref);
+    std::copy (sine2, sine2 + N * 2, sine2_ref);
+    std::fill_n (out, N * 2, 0.0f);
+    std::fill_n (out_ref, N * 2, 0.0f);
+    const auto norm_gain = 1.0f / static_cast<float> (N);
+
+    auto* pffft_setup = pffft_new_setup (N, PFFFT_COMPLEX);
+    pffft_transform (pffft_setup, sine1_ref, sine1_ref, work_data_ref, PFFFT_FORWARD);
+    pffft_transform (pffft_setup, sine2_ref, sine2_ref, work_data_ref, PFFFT_FORWARD);
+    pffft_zconvolve_accumulate (pffft_setup, sine1_ref, sine2_ref, out_ref, norm_gain);
+    pffft_transform (pffft_setup, out_ref, out_ref, work_data_ref, PFFFT_BACKWARD);
+
+    auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
+    REQUIRE (fft_setup != nullptr);
+    chowdsp::fft::fft_transform_unordered (fft_setup, sine1, sine1, work_data, chowdsp::fft::FFT_FORWARD);
+    chowdsp::fft::fft_transform_unordered (fft_setup, sine2, sine2, work_data, chowdsp::fft::FFT_FORWARD);
+    chowdsp::fft::fft_convolve_unordered (fft_setup, sine1, sine2, out, norm_gain);
+    chowdsp::fft::fft_transform_unordered (fft_setup, out, out, work_data, chowdsp::fft::FFT_BACKWARD);
+
+    compare (out_ref, out, N);
+
+    chowdsp::fft::fft_destroy_setup (fft_setup);
+    pffft_destroy_setup (pffft_setup);
+    chowdsp::fft::aligned_free (sine1);
+    pffft_aligned_free (sine1_ref);
+    chowdsp::fft::aligned_free (sine2);
+    pffft_aligned_free (sine2_ref);
+    chowdsp::fft::aligned_free (out);
+    pffft_aligned_free (out_ref);
+    chowdsp::fft::aligned_free (work_data);
+    pffft_aligned_free (work_data_ref);
+}
+
+void test_convolution_real (int N, bool use_avx = false)
 {
     auto* sine1 = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
     auto* sine1_ref = (float*) pffft_aligned_malloc (sizeof (float) * N);
@@ -130,7 +181,7 @@ void test_convolution (int N, bool use_avx = false)
     REQUIRE (fft_setup != nullptr);
     chowdsp::fft::fft_transform_unordered (fft_setup, sine1, sine1, work_data, chowdsp::fft::FFT_FORWARD);
     chowdsp::fft::fft_transform_unordered (fft_setup, sine2, sine2, work_data, chowdsp::fft::FFT_FORWARD);
-    chowdsp::fft::fft_convolve (fft_setup, sine1, sine2, out, norm_gain);
+    chowdsp::fft::fft_convolve_unordered (fft_setup, sine1, sine2, out, norm_gain);
     chowdsp::fft::fft_transform_unordered (fft_setup, out, out, work_data, chowdsp::fft::FFT_BACKWARD);
 
     compare (out_ref, out, N);
@@ -162,9 +213,14 @@ TEST_CASE("FFT SSE/NEON")
             test_fft_real (fft_size);
         }
 
-        SECTION ("Testing Convolution with size: " + std::to_string (fft_size))
+        SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))
         {
-            test_convolution (fft_size);
+            test_convolution_complex (fft_size);
+        }
+
+        SECTION ("Testing Real Convolution with size: " + std::to_string (fft_size))
+        {
+            test_convolution_real (fft_size);
         }
     }
 }

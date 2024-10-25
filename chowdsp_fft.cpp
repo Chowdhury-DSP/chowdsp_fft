@@ -346,7 +346,7 @@ void fft_transform_unordered (void* setup, const float* input, float* output, fl
 #endif
 }
 
-void fft_convolve (void* setup, const float* a, const float* b, float* ab, float scaling)
+void fft_convolve_unordered (void* setup, const float* a, const float* b, float* ab, float scaling)
 {
 #if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
