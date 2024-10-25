@@ -102,6 +102,18 @@ void fft_destroy_setup (void*);
 */
 void fft_transform (void* setup, const float* input, float* output, float* work, fft_direction_t direction);
 
+/**
+ * Same as the above method, but without necessarily maintaining the correct data order
+ * in the frequency domain. This may be useful if your frequency-domain operations
+ * are order-independent, for example, convolution.
+ */
+void fft_transform_unordered (void* setup, const float* input, float* output, float* work, fft_direction_t direction);
+
+/**
+ * Convolve two (unordered) frequency-domain signals, with some scale factor.
+ */
+void fft_convolve_unordered (void* setup, const float* a, const float* b, float* ab, float scaling);
+
 void* aligned_malloc (size_t nb_bytes);
 void aligned_free (void*);
 
