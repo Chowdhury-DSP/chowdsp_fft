@@ -88,19 +88,19 @@ jobs:
         run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
 
       - name: Run Test C++ (Debug)
-        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
+        if: matrix.name != 'Windows-ARM64' && matrix.name != 'Windows-ARM64EC'
         run: ./build/test/Debug/test_chowdsp_fft_cpp
 
       - name: Build Test C (Debug)
         run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_c
 
       - name: Run Test C (Debug)
-        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
+        if: matrix.name != 'Windows-ARM64' && matrix.name != 'Windows-ARM64EC'
         run: ./build/test/Debug/test_chowdsp_fft_c
 
       - name: Build Test C++ (Release)
         run: cmake --build build --config Release --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
 
       - name: Run Test C++ (Release)
-        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
+        if: matrix.name != 'Windows-ARM64' && matrix.name != 'Windows-ARM64EC'
         run: ./build/test/Release/test_chowdsp_fft_cpp
