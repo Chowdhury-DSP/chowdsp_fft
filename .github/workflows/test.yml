@@ -32,10 +32,11 @@ jobs:
             os: windows-2022
             cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
             nparallel: 4
-          - name: Windows-ARM64EC
-            os: windows-2022
-            cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_FLAGS="/arm64EC" -DCMAKE_CXX_FLAGS="/arm64EC" -DCMAKE_EXE_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_SHARED_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_STATIC_LINKER_FLAGS="/MACHINE:ARM64EC"
-            nparallel: 4
+          # TODO: enable this when LLVM 20 is available (https://github.com/llvm/llvm-project/issues/113658)
+          # - name: Windows-ARM64EC
+          #   os: windows-2022
+          #   cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_FLAGS="/arm64EC" -DCMAKE_CXX_FLAGS="/arm64EC" -DCMAKE_EXE_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_SHARED_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_STATIC_LINKER_FLAGS="/MACHINE:ARM64EC"
+          #   nparallel: 4
           - name: MacOS
             os: macos-14
             cmake_args: "-D\"CMAKE_OSX_ARCHITECTURES=arm64;x86_64\""
@@ -67,12 +68,12 @@ jobs:
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@v2
 
-      - name: Setup MSVC devcmd
+      - name: Setup MSVC devcmd (x64)
         if: matrix.name == 'Windows-x64'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup MSVC devcmd
-        if: matrix.name == 'Windows-ARM' || matrix.name == 'Windows-ARM64EC'
+      - name: Setup MSVC devcmd (arm64)
+        if: matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
