@@ -68,11 +68,11 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Setup MSVC devcmd
-        if: runner.name == 'Windows-x64'
+        if: matrix.name == 'Windows-x64'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup MSVC devcmd
-        if: runner.name == 'Windows-ARM' || runner.name == 'Windows-ARM64EC'
+        if: matrix.name == 'Windows-ARM' || matrix.name == 'Windows-ARM64EC'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
