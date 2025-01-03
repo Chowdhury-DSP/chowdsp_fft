@@ -49,6 +49,10 @@ SOFTWARE.
 #include <arm_neon.h>
 #include <tuple>
 
+#ifdef _MSC_VER
+#include <malloc.h>  // For alloca
+#endif
+
 namespace chowdsp::fft::neon
 {
 static constexpr size_t SIMD_SZ = 4;
@@ -171,7 +175,7 @@ static inline auto cplx_mul_v (float32x4_t ar, float32x4_t ai, float32x4_t br, f
 
 static inline auto cplx_mul_conj_v (float32x4_t ar, float32x4_t ai, float32x4_t br, float32x4_t bi)
 {
-    auto tmp = vmulq_f32 (ar, -bi);
+    auto tmp = vmulq_f32 (ar, vnegq_f32(bi));
     ar = vmulq_f32 (ar, br);
     ar = vfmaq_f32 (ar, ai, bi);
     ai = vfmaq_f32 (tmp, ai, br);
@@ -980,22 +984,22 @@ static void pffft_real_finalize (int Ncvec, const float32x4_t* in, float32x4_t* 
     [Xi(3N/4)] [0   0   0   0   0  -s   1  -s]
   */
 
-    xr0 = (cr[0] + cr[2]) + (cr[1] + cr[3]);
-    uout[0][0] = xr0;
-    xi0 = (cr[0] + cr[2]) - (cr[1] + cr[3]);
-    uout[1][0] = xi0;
-    xr2 = (cr[0] - cr[2]);
-    uout[4][0] = xr2;
-    xi2 = (cr[3] - cr[1]);
-    uout[5][0] = xi2;
-    xr1 = ci[0] + s * (ci[1] - ci[3]);
-    uout[2][0] = xr1;
-    xi1 = -ci[2] - s * (ci[1] + ci[3]);
-    uout[3][0] = xi1;
-    xr3 = ci[0] - s * (ci[1] - ci[3]);
-    uout[6][0] = xr3;
-    xi3 = ci[2] - s * (ci[1] + ci[3]);
-    uout[7][0] = xi3;
+    xr0 = (((float*)&cr)[0] + ((float*)&cr)[2]) + (((float*)&cr)[1] + ((float*)&cr)[3]);
+    ((float*)&uout[0])[0] = xr0;
+    xi0 = (((float*)&cr)[0] + ((float*)&cr)[2]) - (((float*)&cr)[1] + ((float*)&cr)[3]);
+    ((float*)&uout[1])[0] = xi0;
+    xr2 = (((float*)&cr)[0] - ((float*)&cr)[2]);
+    ((float*)&uout[4])[0] = xr2;
+    xi2 = (((float*)&cr)[3] - ((float*)&cr)[1]);
+    ((float*)&uout[5])[0] = xi2;
+    xr1 = ((float*)&ci)[0] + s * (((float*)&ci)[1] - ((float*)&ci)[3]);
+    ((float*)&uout[2])[0] = xr1;
+    xi1 = -((float*)&ci)[2] - s * (((float*)&ci)[1] + ((float*)&ci)[3]);
+    ((float*)&uout[3])[0] = xi1;
+    xr3 = ((float*)&ci)[0] - s * (((float*)&ci)[1] - ((float*)&ci)[3]);
+    ((float*)&uout[6])[0] = xr3;
+    xi3 = ((float*)&ci)[2] - s * (((float*)&ci)[1] + ((float*)&ci)[3]);
+    ((float*)&uout[7])[0] = xi3;
 
     for (k = 1; k < dk; ++k)
     {
@@ -1068,10 +1072,11 @@ static void pffft_real_preprocess (int Ncvec, const float32x4_t* in, float32x4_t
     float cr0, ci0, cr1, ci1, cr2, ci2, cr3, ci3;
     static constexpr float s = M_SQRT2;
     assert (in != out);
+
     for (k = 0; k < 4; ++k)
     {
-        Xr[k] = ((float*) in)[8 * k];
-        Xi[k] = ((float*) in)[8 * k + 4];
+        ((float*)&Xr)[k] = ((float*) in)[8 * k];
+        ((float*)&Xi)[k] = ((float*) in)[8 * k + 4];
     }
 
     pffft_real_preprocess_4x4 (in, e, out + 1, 1); // will write only 6 values
@@ -1093,22 +1098,22 @@ static void pffft_real_preprocess (int Ncvec, const float32x4_t* in, float32x4_t
         pffft_real_preprocess_4x4 (in + 8 * k, e + k * 6, out - 1 + k * 8, 0);
     }
 
-    cr0 = (Xr[0] + Xi[0]) + 2 * Xr[2];
-    uout[0][0] = cr0;
-    cr1 = (Xr[0] - Xi[0]) - 2 * Xi[2];
-    uout[0][1] = cr1;
-    cr2 = (Xr[0] + Xi[0]) - 2 * Xr[2];
-    uout[0][2] = cr2;
-    cr3 = (Xr[0] - Xi[0]) + 2 * Xi[2];
-    uout[0][3] = cr3;
-    ci0 = 2 * (Xr[1] + Xr[3]);
-    uout[2 * Ncvec - 1][0] = ci0;
-    ci1 = s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][1] = ci1;
-    ci2 = 2 * (Xi[3] - Xi[1]);
-    uout[2 * Ncvec - 1][2] = ci2;
-    ci3 = -s * (Xr[1] - Xr[3]) - s * (Xi[1] + Xi[3]);
-    uout[2 * Ncvec - 1][3] = ci3;
+    cr0 = (((float*)&Xr)[0] + ((float*)&Xi)[0]) + 2 * ((float*)&Xr)[2];
+    ((float*)&uout[0])[0] = cr0;
+    cr1 = (((float*)&Xr)[0] - ((float*)&Xi)[0]) - 2 * ((float*)&Xi)[2];
+    ((float*)&uout[0])[1] = cr1;
+    cr2 = (((float*)&Xr)[0] + ((float*)&Xi)[0]) - 2 * ((float*)&Xr)[2];
+    ((float*)&uout[0])[2] = cr2;
+    cr3 = (((float*)&Xr)[0] - ((float*)&Xi)[0]) + 2 * ((float*)&Xi)[2];
+    ((float*)&uout[0])[3] = cr3;
+    ci0 = 2 * (((float*)&Xr)[1] + ((float*)&Xr)[3]);
+    ((float*)&uout[2 * Ncvec - 1])[0] = ci0;
+    ci1 = s * (((float*)&Xr)[1] - ((float*)&Xr)[3]) - s * (((float*)&Xi)[1] + ((float*)&Xi)[3]);
+    ((float*)&uout[2 * Ncvec - 1])[1] = ci1;
+    ci2 = 2 * (((float*)&Xi)[3] - ((float*)&Xi)[1]);
+    ((float*)&uout[2 * Ncvec - 1])[2] = ci2;
+    ci3 = -s * (((float*)&Xr)[1] - ((float*)&Xr)[3]) - s * (((float*)&Xi)[1] + ((float*)&Xi)[3]);
+    ((float*)&uout[2 * Ncvec - 1])[3] = ci3;
 }
 
 //====================================================================

@@ -94,7 +94,7 @@ void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, 
 static constexpr uintptr_t address_mask = ~static_cast<uintptr_t> (3);
 static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
 #include "simd/chowdsp_fft_impl_neon.cpp"
 #endif
 
@@ -246,7 +246,7 @@ void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use
 #else
     return sse::fft_new_setup (N, transform);
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
     return neon::fft_new_setup (N, transform);
 #endif
 }
@@ -262,7 +262,7 @@ void fft_destroy_setup (void* ptr)
 #else
     sse::fft_destroy_setup (reinterpret_cast<sse::FFT_Setup*> (ptr));
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
     neon::fft_destroy_setup (reinterpret_cast<neon::FFT_Setup*> (ptr));
 #endif
 }
@@ -297,7 +297,7 @@ void fft_transform (void* setup, const float* input, float* output, float* work,
                                    direction,
                                    1);
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
     neon::pffft_transform_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
                                     input,
                                     output,
@@ -337,7 +337,7 @@ void fft_transform_unordered (void* setup, const float* input, float* output, fl
                                    direction,
                                    0);
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
     neon::pffft_transform_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
                                     input,
                                     output,
@@ -374,7 +374,7 @@ void fft_convolve_unordered (void* setup, const float* a, const float* b, float*
                                   ab,
                                   scaling);
 #endif
-#elif defined(__ARM_NEON__)
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
     neon::pffft_convolve_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
                                    a,
                                    b,
