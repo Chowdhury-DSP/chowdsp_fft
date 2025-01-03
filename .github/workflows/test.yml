@@ -30,7 +30,7 @@ jobs:
             nparallel: 4
           - name: Windows-ARM64
             os: windows-2022
-            cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_FLAGS="--target=arm64-pc-windows-msvc" -DCMAKE_CXX_FLAGS="--target=arm64-pc-windows-msvc" # -DCMAKE_EXE_LINKER_FLAGS="/MACHINE:ARM64" -DCMAKE_SHARED_LINKER_FLAGS="/MACHINE:ARM64" -DCMAKE_STATIC_LINKER_FLAGS="/MACHINE:ARM64"
+            cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_FLAGS="--target=arm64-pc-windows-msvc" -DCMAKE_CXX_FLAGS="--target=arm64-pc-windows-msvc"
             nparallel: 4
           # TODO: enable this when LLVM 20 is available (https://github.com/llvm/llvm-project/issues/113658)
           # - name: Windows-ARM64EC
@@ -88,16 +88,19 @@ jobs:
         run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
 
       - name: Run Test C++ (Debug)
+        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
         run: ./build/test/Debug/test_chowdsp_fft_cpp
 
       - name: Build Test C (Debug)
         run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_c
 
       - name: Run Test C (Debug)
+        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
         run: ./build/test/Debug/test_chowdsp_fft_c
 
       - name: Build Test C++ (Release)
         run: cmake --build build --config Release --parallel ${{ matrix.nparallel }} --target test_chowdsp_fft_cpp
 
       - name: Run Test C++ (Release)
+        if: ! (matrix.name == 'Windows-ARM64' || matrix.name == 'Windows-ARM64EC')
         run: ./build/test/Release/test_chowdsp_fft_cpp
