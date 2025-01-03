@@ -24,15 +24,15 @@ jobs:
             os: ubuntu-22.04
             cmake_args: "-DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15"
             nparallel: 4
-          - name: Windows x64
+          - name: Windows-x64
             os: windows-2022
             cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
             nparallel: 4
-          - name: Windows ARM64
+          - name: Windows-ARM64
             os: windows-2022
             cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
             nparallel: 4
-          - name: Windows ARM64EC
+          - name: Windows-ARM64EC
             os: windows-2022
             cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_FLAGS="/arm64EC" -DCMAKE_CXX_FLAGS="/arm64EC" -DCMAKE_EXE_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_SHARED_LINKER_FLAGS="/MACHINE:ARM64EC" -DCMAKE_STATIC_LINKER_FLAGS="/MACHINE:ARM64EC"
             nparallel: 4
@@ -68,11 +68,11 @@ jobs:
         uses: microsoft/setup-msbuild@v2
 
       - name: Setup MSVC devcmd
-        if: runner.name == 'Windows x64'
+        if: runner.name == 'Windows-x64'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup MSVC devcmd
-        if: runner.name == 'Windows ARM' || runner.name == 'Windows ARM64EC'
+        if: runner.name == 'Windows-ARM' || runner.name == 'Windows-ARM64EC'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64_arm64
