@@ -2028,5 +2028,20 @@ void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, 
         reinterpret_cast<float*> (&vab[1])[0] = abi0 + ai0 * bi0 * scaling;
     }
 }
+
+void fft_accumulate_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, int N)
+{
+    assert (N % SIMD_SZ == 0);
+    const auto Ncvec = N / (int) SIMD_SZ;
+    auto* va = (const __m256*) a;
+    auto* vb = (const __m256*) b;
+    auto* vab = (__m256*) ab;
+
+    for (int i = 0; i < Ncvec; i += 2)
+    {
+        vab[i] = _mm256_add_ps (va[i], vb[i]);
+        vab[i + 1] = _mm256_add_ps (va[i + 1], vb[i + 1]);
+    }
+}
 } // namespace chowdsp::fft::avx
 #endif

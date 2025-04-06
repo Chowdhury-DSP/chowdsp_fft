@@ -267,6 +267,26 @@ void fft_destroy_setup (void* ptr)
 #endif
 }
 
+int fft_simd_width_bytes (void* setup)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (check_is_pointer_sse_setup (setup))
+    {
+        return 16;
+    }
+    else
+    {
+        return 32;
+    }
+#else
+    return 16;
+#endif
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
+    return 16;
+#endif
+}
+
 void fft_transform (void* setup, const float* input, float* output, float* work, fft_direction_t direction)
 {
 #if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
@@ -380,6 +400,42 @@ void fft_convolve_unordered (void* setup, const float* a, const float* b, float*
                                    b,
                                    ab,
                                    scaling);
+#endif
+}
+
+void fft_accumulate (void* setup, const float* a, const float* b, float* ab, int N)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (check_is_pointer_sse_setup (setup))
+    {
+        sse::fft_accumulate_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
+                                      a,
+                                      b,
+                                      ab,
+                                      N);
+    }
+    else
+    {
+        avx::fft_accumulate_internal (reinterpret_cast<avx::FFT_Setup*> (setup),
+                                      a,
+                                      b,
+                                      ab,
+                                      N);
+    }
+#else
+    sse::fft_accumulate_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
+                                  a,
+                                  b,
+                                  ab,
+                                  N);
+#endif
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
+    neon::fft_accumulate_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
+                                   a,
+                                   b,
+                                   ab,
+                                   N);
 #endif
 }
 } // namespace chowdsp::fft
