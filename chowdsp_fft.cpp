@@ -90,7 +90,7 @@ FFT_Setup* fft_new_setup (int N, fft_transform_t transform);
 void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
 void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling);
-void fft_accumulate_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, int N);
+void fft_accumulate_internal (const float* a, const float* b, float* ab, int N);
 } // namespace chowdsp::fft::avx
 static constexpr uintptr_t address_mask = ~static_cast<uintptr_t> (3);
 static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
@@ -410,33 +410,17 @@ void fft_accumulate (void* setup, const float* a, const float* b, float* ab, int
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
     if (check_is_pointer_sse_setup (setup))
     {
-        sse::fft_accumulate_internal (reinterpret_cast<sse::FFT_Setup*> (get_setup_pointer (setup)),
-                                      a,
-                                      b,
-                                      ab,
-                                      N);
+        sse::fft_accumulate_internal (a, b, ab, N);
     }
     else
     {
-        avx::fft_accumulate_internal (reinterpret_cast<avx::FFT_Setup*> (get_setup_pointer (setup)),
-                                      a,
-                                      b,
-                                      ab,
-                                      N);
+        avx::fft_accumulate_internal (a, b, ab, N);
     }
 #else
-    sse::fft_accumulate_internal (reinterpret_cast<sse::FFT_Setup*> (setup),
-                                  a,
-                                  b,
-                                  ab,
-                                  N);
+    sse::fft_accumulate_internal (a, b, ab, N);
 #endif
 #elif defined(__ARM_NEON__) || defined(_M_ARM64)
-    neon::fft_accumulate_internal (reinterpret_cast<neon::FFT_Setup*> (setup),
-                                   a,
-                                   b,
-                                   ab,
-                                   N);
+    neon::fft_accumulate_internal (a, b, ab, N);
 #endif
 }
 } // namespace chowdsp::fft
