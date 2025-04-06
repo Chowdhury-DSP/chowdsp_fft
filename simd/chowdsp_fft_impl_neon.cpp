@@ -1674,4 +1674,19 @@ void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, 
         reinterpret_cast<float*> (&vab[1])[0] = abi0 + ai0 * bi0 * scaling;
     }
 }
+
+void fft_accumulate_internal (const float* a, const float* b, float* ab, int N)
+{
+    assert (N % (SIMD_SZ * 2) == 0);
+    const auto Ncvec = N / (int) SIMD_SZ;
+    auto* va = (const float32x4_t*) a;
+    auto* vb = (const float32x4_t*) b;
+    auto* vab = (float32x4_t*) ab;
+
+    for (int i = 0; i < Ncvec; i += 2)
+    {
+        vab[i] = vaddq_f32 (va[i], vb[i]);
+        vab[i + 1] = vaddq_f32 (va[i + 1], vb[i + 1]);
+    }
+}
 } // namespace chowdsp::fft::neon

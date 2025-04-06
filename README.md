@@ -7,7 +7,9 @@
 `chowdsp_fft` is a fork of the [`pffft`](https://bitbucket.org/jpommier/pffft/src/master/)
 library for computing Fast Fourier Transforms. This fork adds a couple
 of optimizations, most importantly the ability to use AVX intrinsics
-for single-precision FFTs on compatible platforms.
+for single-precision FFTs on compatible platforms. The library also
+contains some methods which may be useful for computing convolutions
+using frequency-domain multiplication.
 
 ## Disclaimer
 

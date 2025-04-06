@@ -86,6 +86,9 @@ void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available
 );
 void fft_destroy_setup (void*);
 
+/** Returns the width (in bytes) of the SIMD registers used by the FFT setup. */
+int fft_simd_width_bytes (void* setup);
+
 /*
    Perform a Fourier transform , The z-domain data is stored as
    interleaved complex numbers.
@@ -111,8 +114,18 @@ void fft_transform_unordered (void* setup, const float* input, float* output, fl
 
 /**
  * Convolve two (unordered) frequency-domain signals, with some scale factor.
+ *
+ * The operation performed is: dft_ab += (dft_a * fdt_b)*scaling
+ *
+ * The dft_a, dft_b and dft_ab pointers may alias.
  */
 void fft_convolve_unordered (void* setup, const float* a, const float* b, float* ab, float scaling);
+
+/**
+ * Computes the sum of two signals of length N.
+ * N must be a multiple of the FFT setup's SIMD width.
+ */
+void fft_accumulate (void* setup, const float* a, const float* b, float* ab, int N);
 
 void* aligned_malloc (size_t nb_bytes);
 void aligned_free (void*);

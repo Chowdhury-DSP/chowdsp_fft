@@ -30,6 +30,8 @@ void test_fft_complex (int N, bool use_avx = false)
     auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
     REQUIRE (fft_setup != nullptr);
     auto* pffft_setup = pffft_new_setup (N, PFFFT_COMPLEX);
+    if (! use_avx)
+        REQUIRE (chowdsp::fft::fft_simd_width_bytes (fft_setup) == 16);
 
     chowdsp::fft::fft_transform (fft_setup, data, data, work_data, chowdsp::fft::FFT_FORWARD);
     pffft_transform_ordered (pffft_setup, data_ref, data_ref, work_data_ref, PFFFT_FORWARD);
@@ -75,7 +77,7 @@ void test_fft_real (int N, bool use_avx = false)
 
     chowdsp::fft::fft_transform (fft_setup, data, data, work_data, chowdsp::fft::FFT_FORWARD);
     pffft_transform_ordered (pffft_setup, data_ref, data_ref, work_data_ref, PFFFT_FORWARD);
-    
+
     compare (data_ref, data, N);
 
     chowdsp::fft::fft_transform (fft_setup, data, data, work_data, chowdsp::fft::FFT_BACKWARD);
@@ -176,6 +178,8 @@ void test_convolution_real (int N, bool use_avx = false)
     pffft_transform (pffft_setup, sine2_ref, sine2_ref, work_data_ref, PFFFT_FORWARD);
     pffft_zconvolve_accumulate (pffft_setup, sine1_ref, sine2_ref, out_ref, norm_gain);
     pffft_transform (pffft_setup, out_ref, out_ref, work_data_ref, PFFFT_BACKWARD);
+    for (int i = 0; i < N; ++i)
+        out_ref[i] += sine1_ref[i];
 
     auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_REAL, use_avx);
     REQUIRE (fft_setup != nullptr);
@@ -183,6 +187,7 @@ void test_convolution_real (int N, bool use_avx = false)
     chowdsp::fft::fft_transform_unordered (fft_setup, sine2, sine2, work_data, chowdsp::fft::FFT_FORWARD);
     chowdsp::fft::fft_convolve_unordered (fft_setup, sine1, sine2, out, norm_gain);
     chowdsp::fft::fft_transform_unordered (fft_setup, out, out, work_data, chowdsp::fft::FFT_BACKWARD);
+    chowdsp::fft::fft_accumulate (fft_setup, out, sine1_ref, out, N);
 
     compare (out_ref, out, N);
 
