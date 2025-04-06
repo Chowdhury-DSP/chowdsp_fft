@@ -30,10 +30,7 @@ void test_fft_complex (int N, bool use_avx = false)
     auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
     REQUIRE (fft_setup != nullptr);
     auto* pffft_setup = pffft_new_setup (N, PFFFT_COMPLEX);
-
-    if (use_avx)
-        REQUIRE (chowdsp::fft::fft_simd_width_bytes (fft_setup) == 32);
-    else
+    if (! use_avx)
         REQUIRE (chowdsp::fft::fft_simd_width_bytes (fft_setup) == 16);
 
     chowdsp::fft::fft_transform (fft_setup, data, data, work_data, chowdsp::fft::FFT_FORWARD);

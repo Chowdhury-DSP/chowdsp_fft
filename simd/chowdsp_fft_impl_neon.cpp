@@ -1677,7 +1677,7 @@ void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, 
 
 void fft_accumulate_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, int N)
 {
-    assert (N % SIMD_SZ == 0);
+    assert (N % (SIMD_SZ * 2) == 0);
     const auto Ncvec = N / (int) SIMD_SZ;
     auto* va = (const float32x4_t*) a;
     auto* vb = (const float32x4_t*) b;
