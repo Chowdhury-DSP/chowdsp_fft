@@ -37,6 +37,21 @@ else()
     endif()
 endif()
 
+if(CHOWDSP_FFT_TOTAL_DEBUG)
+    message(AUTHOR_WARNING "chowdsp_fft -- Skipping debug optimization flags!")
+else()
+    if(MSVC)
+        set(DEBUG_OPT_FLAGS "/O2 /Ob2")
+    else()
+        set(DEBUG_OPT_FLAGS "-O2")
+    endif()
+
+    target_compile_options(chowdsp_fft PRIVATE $<$<CONFIG:Debug>:${DEBUG_OPT_FLAGS}>)
+    if(TARGET chowdsp_fft_avx)
+        target_compile_options(chowdsp_fft_avx PRIVATE $<$<CONFIG:Debug>:${DEBUG_OPT_FLAGS}>)
+    endif()
+endif()
+
 ## JUCE compatibility
 if(EXISTS "${JUCE_MODULES_DIR}")
     message(STATUS "chowdsp_fft -- Configuring chowdsp_fft_juce")
