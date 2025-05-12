@@ -41,10 +41,23 @@ if(CHOWDSP_FFT_TOTAL_DEBUG)
     message(AUTHOR_WARNING "chowdsp_fft -- Skipping debug optimization flags!")
 else()
     if(MSVC)
-        set(DEBUG_OPT_FLAGS "/O2 /Ob2")
+        # message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
+        # message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+        # message(STATUS "CMAKE_C_FLAGS_DEBUG: ${CMAKE_C_FLAGS_DEBUG}")
+        # message(STATUS "CMAKE_CXX_FLAGS_DEBUG: ${CMAKE_CXX_FLAGS_DEBUG}")
+
+        # The "RTC" flags are incompatible with any optimization flags
+        # We disable RTC here, but I believe this does not affect any "higher" level CMake settings.
+        STRING (REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+        STRING (REGEX REPLACE "/RTC(su|[1su])" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+        # message(STATUS "CMAKE_C_FLAGS_DEBUG: ${CMAKE_C_FLAGS_DEBUG}")
+        # message(STATUS "CMAKE_CXX_FLAGS_DEBUG: ${CMAKE_CXX_FLAGS_DEBUG}")
+
+        set(DEBUG_OPT_FLAGS /O2 /Ob2)
     else()
-        set(DEBUG_OPT_FLAGS "-O2")
+        set(DEBUG_OPT_FLAGS -O2)
     endif()
+    message(STATUS "Setting debug optimization flags: ${DEBUG_OPT_FLAGS}")
 
     target_compile_options(chowdsp_fft PRIVATE $<$<CONFIG:Debug>:${DEBUG_OPT_FLAGS}>)
     if(TARGET chowdsp_fft_avx)
