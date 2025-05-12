@@ -130,18 +130,16 @@ static void fft_destroy_setup (FFT_Setup* s)
 }
 
 //====================================================================
-static inline auto interleave2 (__m128 in1, __m128 in2)
+static inline void interleave2 (__m128 in1, __m128 in2, __m128& out1, __m128& out2)
 {
-    auto out1 = _mm_unpacklo_ps (in1, in2);
-    auto out2 = _mm_unpackhi_ps (in1, in2);
-    return std::make_tuple (out1, out2);
+    out1 = _mm_unpacklo_ps (in1, in2);
+    out2 = _mm_unpackhi_ps (in1, in2);
 }
 
-static inline auto uninterleave2 (__m128 in1, __m128 in2)
+static inline void uninterleave2 (__m128 in1, __m128 in2, __m128& out1, __m128& out2)
 {
-    auto out1 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (2, 0, 2, 0));
-    auto out2 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (3, 1, 3, 1));
-    return std::make_tuple (out1, out2);
+    out1 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (2, 0, 2, 0));
+    out2 = _mm_shuffle_ps (in1, in2, _MM_SHUFFLE (3, 1, 3, 1));
 }
 
 static inline auto mul_scalar (__m128 a, float b)
@@ -630,7 +628,7 @@ static void radf2_ps (int ido, int l1, const __m128* __restrict cc, __m128* __re
     }
     for (k = 0; k < l1ido; k += ido)
     {
-        ch[2 * k + ido] = _mm_xor_ps(cc[ido - 1 + k + l1ido], _mm_set1_ps(-0.f)); // negate
+        ch[2 * k + ido] = _mm_xor_ps (cc[ido - 1 + k + l1ido], _mm_set1_ps (-0.f)); // negate
         ch[2 * k + ido - 1] = cc[k + ido - 1];
     }
 }
@@ -961,8 +959,9 @@ static void pffft_real_finalize (int Ncvec, const __m128* in, __m128* out, const
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    union v4sf_union {
-        __m128  v;
+    union v4sf_union
+    {
+        __m128 v;
         float f[SIMD_SZ];
     };
 
@@ -1073,8 +1072,9 @@ static void pffft_real_preprocess (int Ncvec, const __m128* in, __m128* out, con
     int k, dk = Ncvec / (int) SIMD_SZ; // number of 4x4 matrix blocks
     /* fftpack order is f0r f1r f1i f2r f2i ... f(n-1)r f(n-1)i f(n)r */
 
-    union v4sf_union {
-        __m128  v;
+    union v4sf_union
+    {
+        __m128 v;
         float f[SIMD_SZ];
     };
 
@@ -1470,14 +1470,16 @@ static void reversed_copy (int N, const __m128* in, int in_stride, __m128* out)
     auto* in_start = in;
     auto* out_start = out;
 
-    auto [g0, g1] = interleave2 (in[0], in[1]);
+    __m128 g0, g1;
+    interleave2 (in[0], in[1], g0, g1);
     in += in_stride;
 
     *--out = _mm_shuffle_ps (g1, g0, _MM_SHUFFLE (3, 2, 1, 0)); // [g0l, g0h], [g1l g1h] -> [g1l, g0h]
     int k;
     for (k = 1; k < N; ++k)
     {
-        auto [h0, h1] = interleave2 (in[0], in[1]);
+        __m128 h0, h1;
+        interleave2 (in[0], in[1], h0, h1);
         in += in_stride;
         *--out = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
         *--out = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
@@ -1498,7 +1500,7 @@ static void unreversed_copy (int N, const __m128* in, __m128* out, int out_strid
         h1 = *in++;
         g1 = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
         h0 = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
-        std::tie (out[0], out[1]) = uninterleave2 (h0, g1);
+        uninterleave2 (h0, g1, out[0], out[1]);
         out += out_stride;
         g1 = h1;
     }
@@ -1506,7 +1508,7 @@ static void unreversed_copy (int N, const __m128* in, __m128* out, int out_strid
     h1 = g0;
     g1 = _mm_shuffle_ps (h0, g1, _MM_SHUFFLE (3, 2, 1, 0));
     h0 = _mm_shuffle_ps (h1, h0, _MM_SHUFFLE (3, 2, 1, 0));
-    std::tie (out[0], out[1]) = uninterleave2 (h0, g1);
+    uninterleave2 (h0, g1, out[0], out[1]);
 }
 
 static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_direction_t direction)
@@ -1522,8 +1524,8 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
         {
             for (k = 0; k < dk; ++k)
             {
-                std::tie (vout[2 * (0 * dk + k) + 0], vout[2 * (0 * dk + k) + 1]) = interleave2 (vin[k * 8 + 0], vin[k * 8 + 1]);
-                std::tie (vout[2 * (2 * dk + k) + 0], vout[2 * (2 * dk + k) + 1]) = interleave2 (vin[k * 8 + 4], vin[k * 8 + 5]);
+                interleave2 (vin[k * 8 + 0], vin[k * 8 + 1], vout[2 * (0 * dk + k) + 0], vout[2 * (0 * dk + k) + 1]);
+                interleave2 (vin[k * 8 + 4], vin[k * 8 + 5], vout[2 * (2 * dk + k) + 0], vout[2 * (2 * dk + k) + 1]);
             }
             reversed_copy (dk, vin + 2, 8, (__m128*) (out + N / 2));
             reversed_copy (dk, vin + 6, 8, (__m128*) (out + N));
@@ -1532,8 +1534,8 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
         {
             for (k = 0; k < dk; ++k)
             {
-                std::tie (vout[k * 8 + 0], vout[k * 8 + 1]) = uninterleave2 (vin[2 * (0 * dk + k) + 0], vin[2 * (0 * dk + k) + 1]);
-                std::tie (vout[k * 8 + 4], vout[k * 8 + 5]) = uninterleave2 (vin[2 * (2 * dk + k) + 0], vin[2 * (2 * dk + k) + 1]);
+                uninterleave2 (vin[2 * (0 * dk + k) + 0], vin[2 * (0 * dk + k) + 1], vout[k * 8 + 0], vout[k * 8 + 1]);
+                uninterleave2 (vin[2 * (2 * dk + k) + 0], vin[2 * (2 * dk + k) + 1], vout[k * 8 + 4], vout[k * 8 + 5]);
             }
             unreversed_copy (dk, (__m128*) (in + N / 4), (__m128*) (out + N - 6 * SIMD_SZ), -8);
             unreversed_copy (dk, (__m128*) (in + 3 * N / 4), (__m128*) (out + N - 2 * SIMD_SZ), -8);
@@ -1546,7 +1548,7 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
             for (k = 0; k < Ncvec; ++k)
             {
                 int kk = (k / 4) + (k % 4) * (Ncvec / 4);
-                std::tie (vout[kk * 2], vout[kk * 2 + 1]) = interleave2 (vin[k * 2], vin[k * 2 + 1]);
+                interleave2 (vin[k * 2], vin[k * 2 + 1], vout[kk * 2], vout[kk * 2 + 1]);
             }
         }
         else
@@ -1554,7 +1556,7 @@ static void pffft_zreorder (FFT_Setup* setup, const float* in, float* out, fft_d
             for (k = 0; k < Ncvec; ++k)
             {
                 int kk = (k / 4) + (k % 4) * (Ncvec / 4);
-                std::tie (vout[k * 2], vout[k * 2 + 1]) = uninterleave2 (vin[kk * 2], vin[kk * 2 + 1]);
+                uninterleave2 (vin[kk * 2], vin[kk * 2 + 1], vout[k * 2], vout[k * 2 + 1]);
             }
         }
     }
@@ -1591,7 +1593,7 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
             __m128* tmp = buff[ib];
             for (k = 0; k < Ncvec; ++k)
             {
-                std::tie (tmp[k * 2], tmp[k * 2 + 1]) = uninterleave2 (vinput[k * 2], vinput[k * 2 + 1]);
+                uninterleave2 (vinput[k * 2], vinput[k * 2 + 1], tmp[k * 2], tmp[k * 2 + 1]);
             }
             ib = (cfftf1_ps (Ncvec, buff[ib], buff[! ib], buff[ib], setup->twiddle, &setup->ifac[0], -1) == buff[0] ? 0 : 1);
             pffft_cplx_finalize (Ncvec, buff[ib], buff[! ib], (__m128*) setup->e);
@@ -1626,7 +1628,7 @@ void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* fou
             ib = (cfftf1_ps (Ncvec, buff[ib], buff[0], buff[1], setup->twiddle, &setup->ifac[0], +1) == buff[0] ? 0 : 1);
             for (k = 0; k < Ncvec; ++k)
             {
-                std::tie (buff[ib][k * 2], buff[ib][k * 2 + 1]) = interleave2 (buff[ib][k * 2], buff[ib][k * 2 + 1]);
+                interleave2 (buff[ib][k * 2], buff[ib][k * 2 + 1], buff[ib][k * 2], buff[ib][k * 2 + 1]);
             }
         }
     }
@@ -1672,8 +1674,8 @@ void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, 
         br = vb[2 * i + 0];
         bi = vb[2 * i + 1];
         std::tie (ar, ai) = cplx_mul_v (ar, ai, br, bi);
-        vab[2 * i + 0] = _mm_add_ps  (vab[2 * i + 0], _mm_mul_ps (ar, vscal));
-        vab[2 * i + 1] = _mm_add_ps  (vab[2 * i + 1], _mm_mul_ps (ai, vscal));
+        vab[2 * i + 0] = _mm_add_ps (vab[2 * i + 0], _mm_mul_ps (ar, vscal));
+        vab[2 * i + 1] = _mm_add_ps (vab[2 * i + 1], _mm_mul_ps (ai, vscal));
         ar = va[2 * i + 2];
         ai = va[2 * i + 3];
         br = vb[2 * i + 2];
