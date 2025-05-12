@@ -71,7 +71,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Cmake Configure
-        run: cmake -Bbuild -G"Ninja Multi-Config" -DCHOWDSP_FFT_TOTAL_DEBUG=ON -DCHOWDSP_FFT_TESTING=ON ${{ matrix.cmake_args }}
+        run: cmake -Bbuild -G"Ninja Multi-Config" -DCHOWDSP_FFT_TESTING=ON ${{ matrix.cmake_args }}
 
       - name: Build Benchmarks (Debug)
         run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target bench_chowdsp_fft
