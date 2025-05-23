@@ -24,7 +24,11 @@ jobs:
             os: ubuntu-22.04
             cmake_args: "-DCMAKE_LINKER_TYPE=MOLD -DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15"
             nparallel: 4
-          - name: Windows
+          - name: Windows (MSVC)
+            os: windows-2022
+            cmake_args: ""
+            nparallel: 4
+          - name: Windows (Clang)
             os: windows-2022
             cmake_args: -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl
             nparallel: 4
@@ -69,8 +73,14 @@ jobs:
       - name: Cmake Configure
         run: cmake -Bbuild -G"Ninja Multi-Config" -DCHOWDSP_FFT_TESTING=ON ${{ matrix.cmake_args }}
 
-      - name: Build Benchmarks
+      - name: Build Benchmarks (Debug)
+        run: cmake --build build --config Debug --parallel ${{ matrix.nparallel }} --target bench_chowdsp_fft
+
+      - name: Run Benchmarks (Debug)
+        run: ./build/bench/Debug/bench_chowdsp_fft
+
+      - name: Build Benchmarks (Release)
         run: cmake --build build --config Release --parallel ${{ matrix.nparallel }} --target bench_chowdsp_fft
 
-      - name: Run Benchmarks
+      - name: Run Benchmarks (Release)
         run: ./build/bench/Release/bench_chowdsp_fft
