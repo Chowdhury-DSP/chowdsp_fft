@@ -89,6 +89,7 @@ public:
     {
         chowdsp::fft::fft_destroy_setup (setup_real);
         chowdsp::fft::fft_destroy_setup (setup_complex);
+        chowdsp::fft::aligned_free (inout_buffer);
         chowdsp::fft::aligned_free (work_buffer);
     }
 
