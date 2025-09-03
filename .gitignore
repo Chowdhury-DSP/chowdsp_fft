@@ -4,3 +4,4 @@ build*/
 *.raddbg_project
 .vscode/
 .idea/
+.zed/

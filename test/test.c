@@ -124,5 +124,7 @@ int main()
     }
 #endif
 
+    printf ("Testing complete!\n");
+
     return 0;
 }

@@ -57,7 +57,7 @@ else()
     else()
         set(DEBUG_OPT_FLAGS -O2)
     endif()
-    message(STATUS "Setting debug optimization flags: ${DEBUG_OPT_FLAGS}")
+    message(STATUS "chowdsp_fft -- Setting debug optimization flags: ${DEBUG_OPT_FLAGS}")
 
     target_compile_options(chowdsp_fft PRIVATE $<$<CONFIG:Debug>:${DEBUG_OPT_FLAGS}>)
     if(TARGET chowdsp_fft_avx)
