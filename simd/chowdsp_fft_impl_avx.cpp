@@ -70,6 +70,13 @@ struct FFT_Setup
     float* twiddle; // points into 'data', N/4 elements
 };
 
+static size_t fft_bytes_required (int N, fft_transform_t transform)
+{
+    const auto Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
+    const auto data_bytes = 2 * Ncvec * sizeof (float) * SIMD_SZ;
+    return data_bytes + sizeof (FFT_Setup);
+}
+
 FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
 {
     /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
@@ -135,7 +142,6 @@ FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
 void fft_destroy_setup (FFT_Setup* s)
 {
     aligned_free (s->data);
-    free (s);
 }
 
 //====================================================================
