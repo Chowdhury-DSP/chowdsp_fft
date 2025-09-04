@@ -70,14 +70,14 @@ struct FFT_Setup
     float* twiddle; // points into 'data', N/4 elements
 };
 
-static size_t fft_bytes_required (int N, fft_transform_t transform)
+size_t fft_bytes_required (int N, fft_transform_t transform)
 {
     const auto Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
     const auto data_bytes = 2 * Ncvec * sizeof (float) * SIMD_SZ;
     return data_bytes + sizeof (FFT_Setup);
 }
 
-FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
+FFT_Setup* fft_new_setup (int N, fft_transform_t transform, void* data)
 {
     /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
        and 32 for real FFTs -- a lot of stuff would need to be rewritten to
@@ -93,13 +93,17 @@ FFT_Setup* fft_new_setup (int N, fft_transform_t transform)
             return nullptr;
     }
 
-    auto* s = (FFT_Setup*) malloc (sizeof (FFT_Setup));
+    const auto Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
+    const auto data_bytes = 2 * Ncvec * sizeof (float) * SIMD_SZ;
+    auto* s_data = (std::byte*) data;
+
+    auto* s = (FFT_Setup*) (s_data + data_bytes);
     //assert((N % 32) == 0);
     s->N = N;
     s->transform = transform;
     /* nb of complex simd vectors */
-    s->Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
-    s->data = (__m256*) aligned_malloc (2 * s->Ncvec * sizeof (float) * SIMD_SZ);
+    s->Ncvec = Ncvec;
+    s->data = (__m256*) s_data;
     s->e = (float*) s->data;
     s->twiddle = (float*) (s->data + (2 * s->Ncvec * (SIMD_SZ - 1)) / SIMD_SZ);
 

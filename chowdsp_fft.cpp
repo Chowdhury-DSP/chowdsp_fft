@@ -86,7 +86,8 @@ void aligned_free (void* p)
 namespace chowdsp::fft::avx
 {
 struct FFT_Setup;
-FFT_Setup* fft_new_setup (int N, fft_transform_t transform);
+size_t fft_bytes_required (int N, fft_transform_t transform);
+FFT_Setup* fft_new_setup (int N, fft_transform_t transform, void* data);
 void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
 void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling);
