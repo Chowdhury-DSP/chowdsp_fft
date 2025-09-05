@@ -231,78 +231,74 @@ void test_convolution_real (int N, bool use_avx = false)
     pffft_aligned_free (work_data_ref);
 }
 
-TEST_CASE ("FFT SSE/NEON")
+void run_tests_for_size (int fft_size, bool test_convolution, bool use_avx)
 {
-    for (int i = 5; i < 20; ++i)
+    SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
     {
-        const auto fft_size = 1 << i;
-        SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_complex (fft_size);
-        }
+        test_fft_complex (fft_size, use_avx);
+    }
 
-        SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_real (fft_size);
-        }
+    SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
+    {
+        test_fft_real (fft_size, use_avx);
+    }
 
-        SECTION ("Testing pre-allocated Complex FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_complex (fft_size, false, true);
-        }
+    SECTION ("Testing pre-allocated Complex FFT with size: " + std::to_string (fft_size))
+    {
+        test_fft_complex (fft_size, use_avx, true);
+    }
 
-        SECTION ("Testing pre-allocated Real FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_real (fft_size, false, true);
-        }
+    SECTION ("Testing pre-allocated Real FFT with size: " + std::to_string (fft_size))
+    {
+        test_fft_real (fft_size, use_avx, true);
+    }
 
+    if (test_convolution)
+    {
         SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))
         {
-            test_convolution_complex (fft_size);
+            test_convolution_complex (fft_size, use_avx);
         }
 
         SECTION ("Testing Real Convolution with size: " + std::to_string (fft_size))
         {
-            test_convolution_real (fft_size);
+            test_convolution_real (fft_size, use_avx);
         }
     }
 }
 
-#if defined(__SSE2__)
-TEST_CASE ("FFT AVX")
+TEST_CASE ("FFT SSE/NEON (Power of 2)")
 {
     for (int i = 5; i < 20; ++i)
     {
         const auto fft_size = 1 << i;
-        SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_complex (fft_size, true);
-        }
+        run_tests_for_size (fft_size, true, false);
+    }
+}
 
-        SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_real (fft_size, true);
-        }
+TEST_CASE ("FFT SSE/NEON (Other sizes)")
+{
+    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024 })
+    {
+        run_tests_for_size (fft_size, false, false);
+    }
+}
 
-        SECTION ("Testing pre-allocated Complex FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_complex (fft_size, true, true);
-        }
+#if defined(__SSE2__)
+TEST_CASE ("FFT AVX (Power of 2)")
+{
+    for (int i = 5; i < 20; ++i)
+    {
+        const auto fft_size = 1 << i;
+        run_tests_for_size (fft_size, true, true);
+    }
+}
 
-        SECTION ("Testing pre-allocated Real FFT with size: " + std::to_string (fft_size))
-        {
-            test_fft_real (fft_size, true, true);
-        }
-
-        SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))
-        {
-            test_convolution_complex (fft_size, true);
-        }
-
-        SECTION ("Testing Real Convolution with size: " + std::to_string (fft_size))
-        {
-            test_convolution_real (fft_size, true);
-        }
+TEST_CASE ("FFT AVX (Other sizes)")
+{
+    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024 })
+    {
+        run_tests_for_size (fft_size, false, true);
     }
 }
 #endif
