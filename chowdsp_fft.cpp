@@ -86,7 +86,8 @@ void aligned_free (void* p)
 namespace chowdsp::fft::avx
 {
 struct FFT_Setup;
-FFT_Setup* fft_new_setup (int N, fft_transform_t transform);
+size_t fft_bytes_required (int N, fft_transform_t transform);
+FFT_Setup* fft_new_setup (int N, fft_transform_t transform, void* data);
 void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
 void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling);
@@ -228,7 +229,7 @@ bool check_is_pointer_sse_setup (void* ptr)
 }
 #endif
 
-void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use_avx_if_available)
+size_t fft_bytes_required (int N, fft_transform_t transform, bool use_avx_if_available)
 {
 #if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
 #if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
@@ -236,19 +237,45 @@ void* fft_new_setup (int N, fft_transform_t transform, [[maybe_unused]] bool use
     {
         if (cpu_supports_avx())
         {
-            auto* setup_ptr = avx::fft_new_setup (N, transform);
+            return avx::fft_bytes_required (N, transform);
+        }
+    }
+    return sse::fft_bytes_required (N, transform);
+#else
+    return sse::fft_bytes_required (N, transform);
+#endif
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
+    return neon::fft_bytes_required (N, transform);
+#endif
+}
+
+void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available)
+{
+    const auto fft_bytes = fft_bytes_required (N, transform, use_avx_if_available);
+    return fft_new_setup_preallocated (N, transform, aligned_malloc (fft_bytes), use_avx_if_available);
+}
+
+void* fft_new_setup_preallocated (int N, fft_transform_t transform, void* data, [[maybe_unused]] bool use_avx_if_available)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (use_avx_if_available)
+    {
+        if (cpu_supports_avx())
+        {
+            auto* setup_ptr = avx::fft_new_setup (N, transform, data);
             if (setup_ptr != nullptr)
                 return setup_ptr;
         }
     }
-    void* ptr = sse::fft_new_setup (N, transform);
+    void* ptr = sse::fft_new_setup (N, transform, data);
     set_pointer_is_sse_setup (ptr);
     return ptr;
 #else
-    return sse::fft_new_setup (N, transform);
+    return sse::fft_new_setup (N, transform, data);
 #endif
 #elif defined(__ARM_NEON__) || defined(_M_ARM64)
-    return neon::fft_new_setup (N, transform);
+    return neon::fft_new_setup (N, transform, data);
 #endif
 }
 

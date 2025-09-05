@@ -158,4 +158,72 @@ void inline cffti1_ps (int n, float* wa, int* ifac)
         l1 = l2;
     }
 }
+
+template <typename Setup_Type, typename SIMD_Type>
+static inline Setup_Type* fft_new_setup (int N, fft_transform_t transform, int SIMD_SZ, void* data)
+{
+    /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
+       and 32 for real FFTs -- a lot of stuff would need to be rewritten to
+       handle other cases (or maybe just switch to a scalar fft, I don't know..) */
+    if (transform == FFT_REAL)
+    {
+        if (! ((N % (2 * SIMD_SZ * SIMD_SZ)) == 0 && N > 0))
+            return nullptr;
+    }
+    if (transform == FFT_COMPLEX)
+    {
+        if (! ((N % (SIMD_SZ * SIMD_SZ)) == 0 && N > 0))
+            return nullptr;
+    }
+
+    const auto Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
+    const auto data_bytes = 2 * Ncvec * sizeof (float) * SIMD_SZ;
+    auto* s_data = (std::byte*) data;
+
+    auto* s = (Setup_Type*) (s_data + data_bytes);
+    s->N = N;
+    s->transform = transform;
+    /* nb of complex simd vectors */
+    s->Ncvec = Ncvec;
+    s->data = (SIMD_Type*) s_data;
+    s->e = (float*) s->data;
+    s->twiddle = (float*) (s->data + (2 * s->Ncvec * (SIMD_SZ - 1)) / SIMD_SZ);
+
+    int k, m;
+    const auto M = SIMD_SZ - 1;
+
+    for (k = 0; k < s->Ncvec; ++k)
+    {
+        int i = k / (int) SIMD_SZ;
+        int j = k % (int) SIMD_SZ;
+        for (m = 0; m < M; ++m)
+        {
+            const auto A = static_cast<float> (-2 * M_PI * (m + 1) * k / N);
+            s->e[(2 * (i * M + m) + 0) * SIMD_SZ + j] = std::cos (A);
+            s->e[(2 * (i * M + m) + 1) * SIMD_SZ + j] = std::sin (A);
+        }
+    }
+
+    if (transform == FFT_REAL)
+    {
+        rffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
+    }
+    else
+    {
+        cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
+    }
+
+    /* check that N is decomposable with allowed prime factors */
+    for (k = 0, m = 1; k < s->ifac[1]; ++k)
+    {
+        m *= s->ifac[2 + k];
+    }
+    if (m != N / SIMD_SZ)
+    {
+        fft_destroy_setup (s);
+        s = nullptr;
+    }
+
+    return s;
+}
 }

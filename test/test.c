@@ -14,7 +14,7 @@ void compare (const float* ref, const float* test, int N)
         assert (fabsf (ref[n] - test[n]) < tol);
 }
 
-void test_complex (int N, bool use_avx)
+void test_complex (int N, bool use_avx, bool preallocate)
 {
     float* data = (float*) aligned_malloc (sizeof (float) * N * 2);
     float* data_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
@@ -28,7 +28,20 @@ void test_complex (int N, bool use_avx)
     }
     memcpy (data_ref, data, N * 2 * sizeof (float));
 
-    void* fft_setup = fft_new_setup (N, FFT_COMPLEX, use_avx);
+    void* fft_setup;
+    void* prealloc;
+    if (preallocate)
+    {
+        size_t bytes_required = fft_bytes_required (N, FFT_COMPLEX, use_avx);
+        prealloc = aligned_malloc (bytes_required);
+        fft_setup = fft_new_setup_preallocated (N, FFT_COMPLEX, prealloc, use_avx);
+    }
+    else
+    {
+
+        fft_setup = fft_new_setup (N, FFT_COMPLEX, use_avx);
+    }
+
     assert (fft_setup != NULL);
     PFFFT_Setup* pffft_setup = pffft_new_setup (N, PFFFT_COMPLEX);
 
@@ -49,7 +62,10 @@ void test_complex (int N, bool use_avx)
 
     compare (data_ref, data, N * 2);
 
-    fft_destroy_setup (fft_setup);
+    if (preallocate)
+        aligned_free (prealloc);
+    else
+        fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
     aligned_free (data);
     pffft_aligned_free (data_ref);
@@ -57,7 +73,7 @@ void test_complex (int N, bool use_avx)
     pffft_aligned_free (work_data_ref);
 }
 
-void test_real (int N, bool use_avx)
+void test_real (int N, bool use_avx, bool preallocate)
 {
     float* data = (float*) aligned_malloc (sizeof (float) * N);
     float* data_ref = (float*) pffft_aligned_malloc (sizeof (float) * N);
@@ -70,7 +86,20 @@ void test_real (int N, bool use_avx)
     }
     memcpy (data_ref, data, N * sizeof (float));
 
-    void* fft_setup = fft_new_setup (N, FFT_REAL, use_avx);
+    void* fft_setup;
+    void* prealloc;
+    if (preallocate)
+    {
+        size_t bytes_required = fft_bytes_required (N, FFT_REAL, use_avx);
+        prealloc = aligned_malloc (bytes_required);
+        fft_setup = fft_new_setup_preallocated (N, FFT_REAL, prealloc, use_avx);
+    }
+    else
+    {
+
+        fft_setup = fft_new_setup (N, FFT_REAL, use_avx);
+    }
+
     assert (fft_setup != NULL);
     PFFFT_Setup* pffft_setup = pffft_new_setup (N, PFFFT_REAL);
 
@@ -91,7 +120,10 @@ void test_real (int N, bool use_avx)
 
     compare (data_ref, data, N);
 
-    fft_destroy_setup (fft_setup);
+    if (preallocate)
+        aligned_free (prealloc);
+    else
+        fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
     aligned_free (data);
     pffft_aligned_free (data_ref);
@@ -107,9 +139,9 @@ int main()
     {
         const int fft_size = 1 << i;
         printf ("Testing Complex FFT with size: %d\n", fft_size);
-        test_complex (fft_size, false);
+        test_complex (fft_size, false, false);
         printf ("Testing Real FFT with size: %d\n", fft_size);
-        test_real (fft_size, false);
+        test_real (fft_size, false, false);
     }
 
 #if defined(__SSE2__)
@@ -118,11 +150,23 @@ int main()
     {
         const int fft_size = 1 << i;
         printf ("Testing Complex FFT with size: %d\n", fft_size);
-        test_complex (fft_size, true);
+        test_complex (fft_size, true, false);
         printf ("Testing Real FFT with size: %d\n", fft_size);
-        test_real (fft_size, true);
+        test_real (fft_size, true, false);
     }
 #endif
+
+printf ("Running pre-allocated Tests\n");
+for (int i = 5; i < 20; ++i)
+{
+    const int fft_size = 1 << i;
+    printf ("Testing pre-allocated Complex FFT with size: %d\n", fft_size);
+    test_complex (fft_size, false, true);
+    printf ("Testing pre-allocated Real FFT with size: %d\n", fft_size);
+    test_real (fft_size, false, true);
+}
+
+    printf ("Testing complete!\n");
 
     return 0;
 }

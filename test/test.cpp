@@ -3,17 +3,17 @@
 #include <chowdsp_fft.h>
 #include <pffft.h>
 
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 void compare (const float* ref, const float* test, int N)
 {
     const auto tol = 2.0e-7f * (float) N;
     for (int n = 0; n < N; ++n)
-        REQUIRE (test[n] == Catch::Approx { ref[n] }.margin(tol));
+        REQUIRE (test[n] == Catch::Approx { ref[n] }.margin (tol));
 }
 
-void test_fft_complex (int N, bool use_avx = false)
+void test_fft_complex (int N, bool use_avx = false, bool preallocate = false)
 {
     auto* data = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
     auto* data_ref = (float*) pffft_aligned_malloc (sizeof (float) * N * 2);
@@ -27,7 +27,18 @@ void test_fft_complex (int N, bool use_avx = false)
     }
     std::copy (data, data + N * 2, data_ref);
 
-    auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
+    void* fft_setup;
+    void* prealloc;
+    if (preallocate)
+    {
+        const auto bytes_required = chowdsp::fft::fft_bytes_required (N, chowdsp::fft::FFT_COMPLEX, use_avx);
+        prealloc = chowdsp::fft::aligned_malloc (bytes_required);
+        fft_setup = chowdsp::fft::fft_new_setup_preallocated (N, chowdsp::fft::FFT_COMPLEX, prealloc, use_avx);
+    }
+    else
+    {
+        fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
+    }
     REQUIRE (fft_setup != nullptr);
     auto* pffft_setup = pffft_new_setup (N, PFFFT_COMPLEX);
     if (! use_avx)
@@ -50,7 +61,10 @@ void test_fft_complex (int N, bool use_avx = false)
 
     compare (data_ref, data, N * 2);
 
-    chowdsp::fft::fft_destroy_setup (fft_setup);
+    if (preallocate)
+        chowdsp::fft::aligned_free (prealloc);
+    else
+        chowdsp::fft::fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
     chowdsp::fft::aligned_free (data);
     pffft_aligned_free (data_ref);
@@ -58,7 +72,7 @@ void test_fft_complex (int N, bool use_avx = false)
     pffft_aligned_free (work_data_ref);
 }
 
-void test_fft_real (int N, bool use_avx = false)
+void test_fft_real (int N, bool use_avx = false, bool preallocate = false)
 {
     auto* data = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
     auto* data_ref = (float*) pffft_aligned_malloc (sizeof (float) * N);
@@ -71,7 +85,18 @@ void test_fft_real (int N, bool use_avx = false)
     }
     std::copy (data, data + N, data_ref);
 
-    auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_REAL, use_avx);
+    void* fft_setup;
+    void* prealloc;
+    if (preallocate)
+    {
+        const auto bytes_required = chowdsp::fft::fft_bytes_required (N, chowdsp::fft::FFT_REAL, use_avx);
+        prealloc = chowdsp::fft::aligned_malloc (bytes_required);
+        fft_setup = chowdsp::fft::fft_new_setup_preallocated (N, chowdsp::fft::FFT_REAL, prealloc, use_avx);
+    }
+    else
+    {
+        fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_REAL, use_avx);
+    }
     REQUIRE (fft_setup != nullptr);
     auto* pffft_setup = pffft_new_setup (N, PFFFT_REAL);
 
@@ -92,7 +117,10 @@ void test_fft_real (int N, bool use_avx = false)
 
     compare (data_ref, data, N);
 
-    chowdsp::fft::fft_destroy_setup (fft_setup);
+    if (preallocate)
+        chowdsp::fft::aligned_free (prealloc);
+    else
+        chowdsp::fft::fft_destroy_setup (fft_setup);
     pffft_destroy_setup (pffft_setup);
     chowdsp::fft::aligned_free (data);
     pffft_aligned_free (data_ref);
@@ -203,7 +231,7 @@ void test_convolution_real (int N, bool use_avx = false)
     pffft_aligned_free (work_data_ref);
 }
 
-TEST_CASE("FFT SSE/NEON")
+TEST_CASE ("FFT SSE/NEON")
 {
     for (int i = 5; i < 20; ++i)
     {
@@ -216,6 +244,16 @@ TEST_CASE("FFT SSE/NEON")
         SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
         {
             test_fft_real (fft_size);
+        }
+
+        SECTION ("Testing pre-allocated Complex FFT with size: " + std::to_string (fft_size))
+        {
+            test_fft_complex (fft_size, false, true);
+        }
+
+        SECTION ("Testing pre-allocated Real FFT with size: " + std::to_string (fft_size))
+        {
+            test_fft_real (fft_size, false, true);
         }
 
         SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))
@@ -231,7 +269,7 @@ TEST_CASE("FFT SSE/NEON")
 }
 
 #if defined(__SSE2__)
-TEST_CASE("FFT AVX")
+TEST_CASE ("FFT AVX")
 {
     for (int i = 5; i < 20; ++i)
     {
@@ -244,6 +282,16 @@ TEST_CASE("FFT AVX")
         SECTION ("Testing Real FFT with size: " + std::to_string (fft_size))
         {
             test_fft_real (fft_size, true);
+        }
+
+        SECTION ("Testing pre-allocated Complex FFT with size: " + std::to_string (fft_size))
+        {
+            test_fft_complex (fft_size, true, true);
+        }
+
+        SECTION ("Testing pre-allocated Real FFT with size: " + std::to_string (fft_size))
+        {
+            test_fft_real (fft_size, true, true);
         }
 
         SECTION ("Testing Complex Convolution with size: " + std::to_string (fft_size))

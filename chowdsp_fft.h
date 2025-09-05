@@ -75,6 +75,16 @@ typedef enum
 } fft_transform_t;
 
 /*
+  Returns the number of bytes needed for a "pre-allocated" FFT.
+  See `fft_new_setup_preallocated` for more details.
+*/
+size_t fft_bytes_required (int N, fft_transform_t transform, bool use_avx_if_available
+#ifdef __cplusplus
+                                                             = true
+#endif
+);
+
+/*
   prepare for performing transforms of size N -- the returned
   FFT_Setup structure is read-only so it can safely be shared by
   multiple concurrent threads.
@@ -82,6 +92,28 @@ typedef enum
 void* fft_new_setup (int N, fft_transform_t transform, bool use_avx_if_available
 #ifdef __cplusplus
                                                        = true
+#endif
+);
+
+/*
+  Same as fft_new_setup, except that all the memory for the FFT
+  is pre-allocated, and is provided by the caller via the "data"
+  pointer.
+
+  pffft's `aligned_malloc` aligns all allocations to 64 bytes.
+  Depending on your specific case, you may be able to get away
+  with a lower alignment requirement, but make sure to test! It
+  is expected that at least 16-byte alignment will be required
+  for FFTs using NEON or SSE, and at least 32-byte alignment will
+  be required for FFTs using AVX.
+
+  If you create your FFT with this method, you don't need to call
+  `fft_destroy_setup`, but you are responsible for freeing the
+  pre-allocated memory.
+*/
+void* fft_new_setup_preallocated (int N, fft_transform_t transform, void* data, bool use_avx_if_available
+#ifdef __cplusplus
+                                                                                = true
 #endif
 );
 void fft_destroy_setup (void*);
