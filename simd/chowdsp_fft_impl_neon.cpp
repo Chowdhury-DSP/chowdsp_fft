@@ -77,65 +77,7 @@ static size_t fft_bytes_required (int N, fft_transform_t transform)
 
 static FFT_Setup* fft_new_setup (int N, fft_transform_t transform, void* data)
 {
-    const auto Ncvec = (transform == FFT_REAL ? N / 2 : N) / SIMD_SZ;
-    const auto data_bytes = 2 * Ncvec * sizeof (float) * SIMD_SZ;
-    auto* s_data = (std::byte*) data;
-
-    auto* s = (FFT_Setup*) (s_data + data_bytes);
-    /* unfortunately, the fft size must be a multiple of 16 for complex FFTs
-       and 32 for real FFTs -- a lot of stuff would need to be rewritten to
-       handle other cases (or maybe just switch to a scalar fft, I don't know..) */
-    if (transform == FFT_REAL)
-    {
-        assert ((N % (2 * SIMD_SZ * SIMD_SZ)) == 0 && N > 0);
-    }
-    if (transform == FFT_COMPLEX)
-    {
-        assert ((N % (SIMD_SZ * SIMD_SZ)) == 0 && N > 0);
-    }
-    //assert((N % 32) == 0);
-    s->N = N;
-    s->transform = transform;
-    /* nb of complex simd vectors */
-    s->Ncvec = Ncvec;
-    s->data = (float32x4_t*) s_data;
-    s->e = (float*) s->data;
-    s->twiddle = (float*) (s->data + (2 * s->Ncvec * (SIMD_SZ - 1)) / SIMD_SZ);
-
-    int k, m;
-    for (k = 0; k < s->Ncvec; ++k)
-    {
-        int i = k / (int) SIMD_SZ;
-        int j = k % (int) SIMD_SZ;
-        for (m = 0; m < SIMD_SZ - 1; ++m)
-        {
-            const auto A = static_cast<float> (-2 * M_PI * (m + 1) * k / N);
-            s->e[(2 * (i * 3 + m) + 0) * SIMD_SZ + j] = std::cos (A);
-            s->e[(2 * (i * 3 + m) + 1) * SIMD_SZ + j] = std::sin (A);
-        }
-    }
-
-    if (transform == FFT_REAL)
-    {
-        common::rffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
-    }
-    else
-    {
-        common::cffti1_ps (N / (int) SIMD_SZ, s->twiddle, s->ifac);
-    }
-
-    /* check that N is decomposable with allowed prime factors */
-    for (k = 0, m = 1; k < s->ifac[1]; ++k)
-    {
-        m *= s->ifac[2 + k];
-    }
-    if (m != N / SIMD_SZ)
-    {
-        fft_destroy_setup (s);
-        s = nullptr;
-    }
-
-    return s;
+    return common::fft_new_setup<FFT_Setup, float32x4_t> (N, transform, SIMD_SZ, data);
 }
 
 static void fft_destroy_setup (FFT_Setup* s)
