@@ -231,6 +231,83 @@ void test_convolution_real (int N, bool use_avx = false)
     pffft_aligned_free (work_data_ref);
 }
 
+void test_zreorder_complex (int N, bool use_avx = false)
+{
+    auto* input = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* unordered = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* reordered = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* unordered_back = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* ordered_ref = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+    auto* work = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N * 2);
+
+    for (int i = 0; i < N; ++i)
+    {
+        input[i * 2] = std::sin (3.14f * (100.0f / 48000.0f) * (float) i);
+        input[i * 2 + 1] = std::cos (3.14f * (100.0f / 48000.0f) * (float) i);
+    }
+
+    auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_COMPLEX, use_avx);
+    REQUIRE (fft_setup != nullptr);
+
+    // Reference: ordered forward FFT
+    chowdsp::fft::fft_transform (fft_setup, input, ordered_ref, work, chowdsp::fft::FFT_FORWARD);
+
+    // Unordered forward FFT then reorder FORWARD → should match ordered reference
+    std::copy (input, input + N * 2, unordered);
+    chowdsp::fft::fft_transform_unordered (fft_setup, unordered, unordered, work, chowdsp::fft::FFT_FORWARD);
+    chowdsp::fft::fft_zreorder (fft_setup, unordered, reordered, chowdsp::fft::FFT_FORWARD);
+    compare (ordered_ref, reordered, N * 2);
+
+    // Round-trip: reorder BACKWARD should recover the original unordered data
+    chowdsp::fft::fft_zreorder (fft_setup, reordered, unordered_back, chowdsp::fft::FFT_BACKWARD);
+    compare (unordered, unordered_back, N * 2);
+
+    chowdsp::fft::fft_destroy_setup (fft_setup);
+    chowdsp::fft::aligned_free (input);
+    chowdsp::fft::aligned_free (unordered);
+    chowdsp::fft::aligned_free (reordered);
+    chowdsp::fft::aligned_free (unordered_back);
+    chowdsp::fft::aligned_free (ordered_ref);
+    chowdsp::fft::aligned_free (work);
+}
+
+void test_zreorder_real (int N, bool use_avx = false)
+{
+    auto* input = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+    auto* unordered = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+    auto* reordered = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+    auto* unordered_back = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+    auto* ordered_ref = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+    auto* work = (float*) chowdsp::fft::aligned_malloc (sizeof (float) * N);
+
+    for (int i = 0; i < N; ++i)
+        input[i] = std::sin (3.14f * (100.0f / 48000.0f) * (float) i);
+
+    auto* fft_setup = chowdsp::fft::fft_new_setup (N, chowdsp::fft::FFT_REAL, use_avx);
+    REQUIRE (fft_setup != nullptr);
+
+    // Reference: ordered forward FFT
+    chowdsp::fft::fft_transform (fft_setup, input, ordered_ref, work, chowdsp::fft::FFT_FORWARD);
+
+    // Unordered forward FFT then reorder FORWARD → should match ordered reference
+    std::copy (input, input + N, unordered);
+    chowdsp::fft::fft_transform_unordered (fft_setup, unordered, unordered, work, chowdsp::fft::FFT_FORWARD);
+    chowdsp::fft::fft_zreorder (fft_setup, unordered, reordered, chowdsp::fft::FFT_FORWARD);
+    compare (ordered_ref, reordered, N);
+
+    // Round-trip: reorder BACKWARD should recover the original unordered data
+    chowdsp::fft::fft_zreorder (fft_setup, reordered, unordered_back, chowdsp::fft::FFT_BACKWARD);
+    compare (unordered, unordered_back, N);
+
+    chowdsp::fft::fft_destroy_setup (fft_setup);
+    chowdsp::fft::aligned_free (input);
+    chowdsp::fft::aligned_free (unordered);
+    chowdsp::fft::aligned_free (reordered);
+    chowdsp::fft::aligned_free (unordered_back);
+    chowdsp::fft::aligned_free (ordered_ref);
+    chowdsp::fft::aligned_free (work);
+}
+
 void run_tests_for_size (int fft_size, bool test_convolution, bool use_avx)
 {
     SECTION ("Testing Complex FFT with size: " + std::to_string (fft_size))
@@ -264,6 +341,16 @@ void run_tests_for_size (int fft_size, bool test_convolution, bool use_avx)
         {
             test_convolution_real (fft_size, use_avx);
         }
+    }
+
+    SECTION ("Testing Complex Zreorder with size: " + std::to_string (fft_size))
+    {
+        test_zreorder_complex (fft_size, use_avx);
+    }
+
+    SECTION ("Testing Real Zreorder with size: " + std::to_string (fft_size))
+    {
+        test_zreorder_real (fft_size, use_avx);
     }
 }
 

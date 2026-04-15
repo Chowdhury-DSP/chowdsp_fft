@@ -1777,7 +1777,7 @@ static void unreversed_copy (int N, const __m256* in, __m256* out, int out_strid
     out[1] = _mm256_unpackhi_ps (g1_r, h0_r);
 }
 
-static void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_direction_t direction)
+void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_direction_t direction)
 {
     int k, N = setup->N, Ncvec = setup->Ncvec;
     auto* vin = (__m256*) in;
