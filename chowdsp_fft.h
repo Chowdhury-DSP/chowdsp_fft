@@ -154,6 +154,16 @@ void fft_transform_unordered (void* setup, const float* input, float* output, fl
 void fft_convolve_unordered (void* setup, const float* a, const float* b, float* ab, float scaling);
 
 /**
+ * Reorder the frequency-domain data between the "ordered" and "unordered" layouts.
+ *
+ * Use FFT_FORWARD to reorder from the unordered layout (as produced by fft_transform_unordered)
+ * into the canonical ordered layout. Use FFT_BACKWARD for the reverse.
+ *
+ * input and output must not alias.
+ */
+void fft_zreorder (void* setup, const float* input, float* output, fft_direction_t direction);
+
+/**
  * Computes the sum of two signals of length N.
  * N must be a multiple of the FFT setup's SIMD width.
  */

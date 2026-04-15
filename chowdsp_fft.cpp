@@ -92,6 +92,7 @@ void fft_destroy_setup (FFT_Setup* s);
 void pffft_transform_internal (FFT_Setup* setup, const float* finput, float* foutput, void* scratch, fft_direction_t direction, int ordered);
 void pffft_convolve_internal (FFT_Setup* setup, const float* a, const float* b, float* ab, float scaling);
 void fft_accumulate_internal (const float* a, const float* b, float* ab, int N);
+void pffft_zreorder (FFT_Setup* setup, float* in, float* out, fft_direction_t direction);
 } // namespace chowdsp::fft::avx
 static constexpr uintptr_t address_mask = ~static_cast<uintptr_t> (3);
 static constexpr uintptr_t typeid_mask = static_cast<uintptr_t> (3);
@@ -428,6 +429,38 @@ void fft_convolve_unordered (void* setup, const float* a, const float* b, float*
                                    b,
                                    ab,
                                    scaling);
+#endif
+}
+
+void fft_zreorder (void* setup, const float* input, float* output, fft_direction_t direction)
+{
+#if defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#if CHOWDSP_FFT_COMPILER_SUPPORTS_AVX
+    if (check_is_pointer_sse_setup (setup))
+    {
+        sse::pffft_zreorder (reinterpret_cast<sse::FFT_Setup*> (get_setup_pointer (setup)),
+                             input,
+                             output,
+                             direction);
+    }
+    else
+    {
+        avx::pffft_zreorder (reinterpret_cast<avx::FFT_Setup*> (get_setup_pointer (setup)),
+                             const_cast<float*> (input),
+                             output,
+                             direction);
+    }
+#else
+    sse::pffft_zreorder (reinterpret_cast<sse::FFT_Setup*> (setup),
+                         input,
+                         output,
+                         direction);
+#endif
+#elif defined(__ARM_NEON__) || defined(_M_ARM64)
+    neon::pffft_zreorder (reinterpret_cast<neon::FFT_Setup*> (setup),
+                          input,
+                          output,
+                          direction);
 #endif
 }
 
