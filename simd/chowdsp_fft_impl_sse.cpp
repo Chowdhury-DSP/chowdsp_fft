@@ -119,6 +119,15 @@ static inline auto cplx_mul_conj (__m128 ar, __m128 ai, float br, float bi)
     return std::make_tuple (ar, ai);
 }
 
+// Computes (wr + j*wi) * conj (ar + j*ai).
+// This operand order is required by the real radix-5 forward pass.
+static inline auto twiddle_mul_conj (__m128 ar, __m128 ai, float wr, float wi)
+{
+    auto real = _mm_add_ps (mul_scalar (ar, wr), mul_scalar (ai, wi));
+    auto imag = _mm_sub_ps (mul_scalar (ar, wi), mul_scalar (ai, wr));
+    return std::make_tuple (real, imag);
+}
+
 static inline auto cplx_mul_v (__m128 ar, __m128 ai, __m128 br, __m128 bi)
 {
     auto tmp = _mm_mul_ps (ar, bi);
@@ -749,10 +758,10 @@ static void radf5_ps (int ido, int l1, const __m128* __restrict cc, __m128* __re
         for (i = 3; i <= ido; i += 2)
         {
             ic = idp2 - i;
-            std::tie (dr2, di2) = cplx_mul_conj (cc_ref (i - 1, k, 2), cc_ref (i, k, 2), wa1[i - 3], wa1[i - 2]);
-            std::tie (dr3, di3) = cplx_mul_conj (cc_ref (i - 1, k, 3), cc_ref (i, k, 3), wa2[i - 3], wa2[i - 2]);
-            std::tie (dr4, di4) = cplx_mul_conj (cc_ref (i - 1, k, 4), cc_ref (i, k, 4), wa3[i - 3], wa3[i - 2]);
-            std::tie (dr5, di5) = cplx_mul_conj (cc_ref (i - 1, k, 5), cc_ref (i, k, 5), wa4[i - 3], wa4[i - 2]);
+            std::tie (dr2, di2) = twiddle_mul_conj (cc_ref (i - 1, k, 2), cc_ref (i, k, 2), wa1[i - 3], wa1[i - 2]);
+            std::tie (dr3, di3) = twiddle_mul_conj (cc_ref (i - 1, k, 3), cc_ref (i, k, 3), wa2[i - 3], wa2[i - 2]);
+            std::tie (dr4, di4) = twiddle_mul_conj (cc_ref (i - 1, k, 4), cc_ref (i, k, 4), wa3[i - 3], wa3[i - 2]);
+            std::tie (dr5, di5) = twiddle_mul_conj (cc_ref (i - 1, k, 5), cc_ref (i, k, 5), wa4[i - 3], wa4[i - 2]);
             cr2 = _mm_add_ps (dr2, dr5);
             ci5 = _mm_sub_ps (dr5, dr2);
             cr5 = _mm_sub_ps (di2, di5);
