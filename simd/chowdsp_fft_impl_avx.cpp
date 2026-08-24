@@ -156,6 +156,14 @@ static inline void cplx_mul_conj (__m256& yr, __m256& yi, __m256 ar, __m256 ai, 
     yi = _mm256_fmsub_ps (ai, _mm256_set1_ps (br), tmp);
 }
 
+// Computes (wr + j*wi) * conj (ar + j*ai).
+// This operand order is required by the real radix-5 forward pass.
+static inline void twiddle_mul_conj (__m256& yr, __m256& yi, __m256 ar, __m256 ai, float wr, float wi)
+{
+    yr = _mm256_fmadd_ps (ai, _mm256_set1_ps (wi), mul_scalar (ar, wr));
+    yi = _mm256_fnmadd_ps (ai, _mm256_set1_ps (wr), mul_scalar (ar, wi));
+}
+
 static inline auto cplx_mul_v (__m256& ar, __m256& ai, __m256 br, __m256 bi)
 {
     auto tmp = _mm256_mul_ps (ar, bi);
@@ -916,10 +924,10 @@ static void radf5_ps (int ido, int l1, const __m256* __restrict cc, __m256* __re
         for (i = 3; i <= ido; i += 2)
         {
             ic = idp2 - i;
-            cplx_mul_conj (dr2, di2, cc_ref (i - 1, k, 2), cc_ref (i, k, 2), wa1[i - 3], wa1[i - 2]);
-            cplx_mul_conj (dr3, di3, cc_ref (i - 1, k, 3), cc_ref (i, k, 3), wa2[i - 3], wa2[i - 2]);
-            cplx_mul_conj (dr4, di4, cc_ref (i - 1, k, 4), cc_ref (i, k, 4), wa3[i - 3], wa3[i - 2]);
-            cplx_mul_conj (dr5, di5, cc_ref (i - 1, k, 5), cc_ref (i, k, 5), wa4[i - 3], wa4[i - 2]);
+            twiddle_mul_conj (dr2, di2, cc_ref (i - 1, k, 2), cc_ref (i, k, 2), wa1[i - 3], wa1[i - 2]);
+            twiddle_mul_conj (dr3, di3, cc_ref (i - 1, k, 3), cc_ref (i, k, 3), wa2[i - 3], wa2[i - 2]);
+            twiddle_mul_conj (dr4, di4, cc_ref (i - 1, k, 4), cc_ref (i, k, 4), wa3[i - 3], wa3[i - 2]);
+            twiddle_mul_conj (dr5, di5, cc_ref (i - 1, k, 5), cc_ref (i, k, 5), wa4[i - 3], wa4[i - 2]);
             cr2 = _mm256_add_ps (dr2, dr5);
             ci5 = _mm256_sub_ps (dr5, dr2);
             cr5 = _mm256_sub_ps (di2, di5);
