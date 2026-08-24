@@ -365,7 +365,7 @@ TEST_CASE ("FFT SSE/NEON (Power of 2)")
 
 TEST_CASE ("FFT SSE/NEON (Other sizes)")
 {
-    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024 })
+    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024, 8000, 96000 })
     {
         run_tests_for_size (fft_size, false, false);
     }
@@ -383,7 +383,7 @@ TEST_CASE ("FFT AVX (Power of 2)")
 
 TEST_CASE ("FFT AVX (Other sizes)")
 {
-    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024 })
+    for (int fft_size : { 96, 192, 384, 480, 5 * 128, 3 * 256, 9 * 1024, 8000, 96000 })
     {
         run_tests_for_size (fft_size, false, true);
     }
